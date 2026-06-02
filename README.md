@@ -209,18 +209,19 @@ little *over* 100% when the parent `bash` and the `jq` child briefly run on two 
 
 A *low* percentage here would actually be worse: it would mean the process spends its time
 blocked (on network/disk/another process) while taking longer in real time. **High
-utilization + short duration is ideal** — it does its work in one tight ~10 ms burst and
+utilization + short duration is ideal** — it does its work in one tight ~8 ms burst and
 exits.
 
-The number that reflects real system impact is the **duty cycle**: the script runs ~10 ms,
-then the core is free for the next ~60 s, so the time-averaged load is about **0.015% of
-one core** at `refreshInterval: 60` (scales inversely with the interval). In short: *97% =
-"efficient, no idle waiting, for 10 ms"; 0.015% = "negligible over time."*
+The number that reflects real system impact is the **duty cycle**: the script runs ~8 ms,
+then the core is free for the next ~60 s, so the time-averaged load is about **0.014% of
+one core** at `refreshInterval: 60` (scales inversely with the interval). In short: *~100% =
+"efficient, no idle waiting, for 8 ms"; 0.014% = "negligible over time."*
 
-Each run is a short-lived process: ~10 ms, a few MB of RAM while it runs, **nothing
-resident between runs**, and only two forks (`cat` to read stdin + one `jq` to parse).
-At the default `refreshInterval: 60` that's a negligible, periodic blip. (Wall/CPU/RAM
-need bash 5+; peak-RAM and fork-count are Linux-only and degrade gracefully elsewhere.)
+Each run is a short-lived process: ~8 ms, a few MB of RAM while it runs, **nothing
+resident between runs**, and at most one fork (a single `jq` on a full render; zero on a
+throttled reprint — stdin is read with a bash builtin, not `cat`). At the default
+`refreshInterval: 60` that's a negligible, periodic blip. (Wall/CPU/RAM need bash 5+;
+peak-RAM and fork-count are Linux-only and degrade gracefully elsewhere.)
 
 ## Field reference
 
