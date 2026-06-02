@@ -220,7 +220,7 @@ Peak RAM:   1.0 MB   (single process, transient — 0 resident between runs)
 External processes/run: 0  (no bash, no jq — single binary)
 ```
 
-(The per-run wall includes the benchmark's own timing overhead; the `min ~0.9 ms` is closer
+(The per-run wall includes the benchmark's own timing overhead; the `min ~0.6 ms` is closer
 to the binary's true single-shot cost. The occasional `max` spike is a scheduler hiccup,
 not the binary.)
 
@@ -307,9 +307,9 @@ Throttled fast-path: 2.5 ms/run   (cached reprint, no jq)
 ```
 
 ```
-Wall time:  1.17 ms/run   (min 0.91, max 2.32)   [5000 runs in 5.83s]
-CPU time:   0.54 ms/run   (user+sys, summed over 5000 runs)
-CPU usage:  46% of one core while running   (CPU 2.70s / wall 5.83s)
+Wall time:  1.10 ms/run   (min 0.63, max 3.81)   [5000 runs in 5.49s]
+CPU time:   0.47 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  43% of one core while running   (CPU 2.37s / wall 5.49s)
             0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
 Peak RAM:   1.0 MB   (single process, transient — 0 resident between runs)
 External processes/run: 0  (no bash, no jq — single binary)
