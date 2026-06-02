@@ -44,7 +44,7 @@ Both render the exact same line — choose how it runs:
 | Needs | `jq` + bash 4.2+ | a Rust toolchain (`cargo`) + a one-time build |
 | Build step | none | `cargo build` (done for you by `--native`) |
 | Portability | runs anywhere | platform-specific (build locally) |
-| Speed / RAM | ~6 ms (~1.7 ms throttled) / ~6 MB | ~1 ms / ~1–2 MB, zero forks |
+| Speed / RAM | ~6 ms (~1.7 ms throttled) / ~6 MB | ~0.4 ms / <1 MB, zero forks |
 | Auditability | plain shell, read it in a glance | Rust source in [`native/`](native/) |
 
 **Recommendation: use the script.** The status line runs at most ~once a second, so the
@@ -62,7 +62,7 @@ Install the Claude Code status line from
 https://github.com/radumarias/claude-code-statusline
 
 1. Ask me whether I want the bash SCRIPT (default; needs jq + bash 4.2+, no build) or
-   the NATIVE binary (~1ms, ~1-2MB, zero forks — but needs `cargo` and a one-time build,
+   the NATIVE binary (~0.4ms, <1MB, zero forks — but needs `cargo` and a one-time build,
    and is platform-specific). Recommend the script unless I want the minimal footprint.
 2. Check the prerequisites for my choice; if something's missing, tell me how to install
    it for my OS and stop.
@@ -213,14 +213,14 @@ no dynamic linker at startup.
 Example `./bench.sh --native 5000` (musl build) on Linux x86_64:
 
 ```
-Wall time:  0.53 ms/run   (min 0.36, max 2.05)   [5000 runs in 2.63s]
+Wall time:  0.57 ms/run   (min 0.35, max 1.53)   [5000 runs in 2.83s]
 Spawn floor (min of 2000; sub-ms deltas are noisy — min is the robust estimator):
-  /usr/bin/true (system, usually dynamic): 0.547 ms
-  empty static Rust bin (floor):           0.305 ms
-  this binary (read+parse+render+write):   0.412 ms
-  → vs the empty static bin: +0.107 ms — the ~6 µs of logic is below spawn noise.
-CPU time:   0.47 ms/run   (user+sys, summed over 5000 runs)
-CPU usage:  89% of one core while running   (CPU 2.33s / wall 2.63s)
+  /usr/bin/true (system, usually dynamic): 0.509 ms
+  empty static Rust bin (floor):           0.269 ms
+  this binary (read+parse+render+write):   0.346 ms
+  → vs the empty static bin: +0.077 ms — the ~6 µs of logic is below spawn noise.
+CPU time:   0.41 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  72% of one core while running   (CPU 2.04s / wall 2.83s)
             0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
 Peak RAM:   0.0 MB   (single process, transient — 0 resident between runs)
 External processes/run: 0  (no bash, no jq — single binary)
@@ -250,10 +250,10 @@ cargo run --release --bin bench --manifest-path native/Cargo.toml
 ```
 
 ```
-parse JSON               3150 ns/op
-render_parsed (format)   2580 ns/op
-render (parse+format)    5930 ns/op   ← the whole logic: ~0.006 ms
-render_bar (one bar)      290 ns/op
+parse JSON               2933 ns/op (min)   3355 ns/op (mean)
+render_parsed (format)   2373 ns/op (min)   2475 ns/op (mean)
+render (parse+format)    5696 ns/op (min)   7313 ns/op (mean)   ← the whole logic: ~0.006 ms
+render_bar (one bar)      309 ns/op (min)    346 ns/op (mean)
 ```
 
 So of a per-invocation wall, the work is **~0.006 ms**; essentially everything else is OS
@@ -264,7 +264,7 @@ is **static linking** — no `ld.so`, no shared-library mapping or relocation at
 | build | size | warm spawn (min) | startup |
 |---|---|---|---|
 | dynamic (PIE) | ~334 KB | ~0.57 ms | maps libc via `ld.so` every launch |
-| static glibc | ~1.07 MB | ~0.43 ms | no `ld.so`; 1475 + 23 self-relocs |
+| static glibc | ~1.07 MB | ~0.38 ms | no `ld.so`; 1475 + 23 self-relocs |
 | **static musl** (preferred) | **~431 KB** | **~0.34 ms** | no `ld.so`; 400 + 0 self-relocs |
 
 This repo builds **static** (`.cargo/config.toml` sets `-C target-feature=+crt-static`,
@@ -272,7 +272,7 @@ scoped to Linux) — safe because the binary uses no NSS/DNS/`getpw*` — which 
 entirely (~25–35% off spawn). On top of that, `install.sh --native` prefers the **musl**
 static target when installed: a ~431 KB binary (2.5× smaller than static glibc's 1.07 MB —
 back to the original footprint) with far fewer startup self-relocations (`R_X86_64_RELATIVE`
-1475→400, `IRELATIVE` 23→0), measured **~10–20% faster warm spawn** (~0.05–0.09 ms — real and
+1475→400, `IRELATIVE` 23→0), measured **~10–20% faster warm spawn** (~0.04–0.09 ms — real and
 reproducible, though sub-0.1 ms, so footprint is the bigger win). Static **no-PIE** was
 measured and dropped (≈10 µs, below noise, and it costs ASLR). The rest (~0.34 ms) is the
 irreducible `execve` + kernel page setup + Rust init.
@@ -321,11 +321,16 @@ Throttled fast-path: 2.5 ms/run   (cached reprint, no jq)
 ```
 
 ```
-Wall time:  1.10 ms/run   (min 0.63, max 3.81)   [5000 runs in 5.49s]
-CPU time:   0.47 ms/run   (user+sys, summed over 5000 runs)
-CPU usage:  43% of one core while running   (CPU 2.37s / wall 5.49s)
+Wall time:  0.48 ms/run   (min 0.35, max 2.28)   [5000 runs in 2.42s]
+Spawn floor (min of 2000; sub-ms deltas are noisy — min is the robust estimator):
+  /usr/bin/true (system, usually dynamic): 0.499 ms
+  empty static Rust bin (floor):           0.285 ms
+  this binary (read+parse+render+write):   0.349 ms
+  → vs the empty static bin: +0.064 ms — the ~6 µs of logic is below spawn noise.
+CPU time:   0.37 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  77% of one core while running   (CPU 1.85s / wall 2.42s)
             0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   1.0 MB   (single process, transient — 0 resident between runs)
+Peak RAM:   0.0 MB   (single process, transient — 0 resident between runs)
 External processes/run: 0  (no bash, no jq — single binary)
 ```
 
