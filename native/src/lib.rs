@@ -324,14 +324,14 @@ pub fn render_parsed(root: &J, now: i64) -> String {
     }
 
     // Context bar.
-    if let Some(ctx) = int_at(&root, &["context_window", "used_percentage"]) {
+    if let Some(ctx) = int_at(root, &["context_window", "used_percentage"]) {
         parts.push(format!("{W}ctx{R} {}", render_bar(ctx, BAR_W)));
     }
 
     // 5h bar + reset countdown.
-    if let Some(p5) = int_at(&root, &["rate_limits", "five_hour", "used_percentage"]) {
+    if let Some(p5) = int_at(root, &["rate_limits", "five_hour", "used_percentage"]) {
         let mut seg = format!("{W}5h{R} {}", render_bar(p5, BAR_W));
-        if let Some(reset) = int_at(&root, &["rate_limits", "five_hour", "resets_at"]) {
+        if let Some(reset) = int_at(root, &["rate_limits", "five_hour", "resets_at"]) {
             let diff = reset - now;
             let r = if diff >= 3600 {
                 format!("{}h{}m", diff / 3600, (diff % 3600) / 60)
@@ -350,7 +350,7 @@ pub fn render_parsed(root: &J, now: i64) -> String {
     }
 
     // Weekly: all-models (wk) and Sonnet-only (son, when a future envelope has it).
-    if let Some(wk) = int_at(&root, &["rate_limits", "seven_day", "used_percentage"]) {
+    if let Some(wk) = int_at(root, &["rate_limits", "seven_day", "used_percentage"]) {
         parts.push(format!("{W}wk{R} {}{wk}%{R}", pct_color(wk)));
     }
     if let Some(J::Obj(m)) = root.get("rate_limits") {
@@ -366,7 +366,7 @@ pub fn render_parsed(root: &J, now: i64) -> String {
     }
 
     // Duration (elapsed).
-    if let Some(ms) = int_at(&root, &["cost", "total_duration_ms"]) {
+    if let Some(ms) = int_at(root, &["cost", "total_duration_ms"]) {
         let secs = ms / 1000;
         let dur = if secs >= 3600 {
             format!("{}h{}m", secs / 3600, (secs % 3600) / 60)
