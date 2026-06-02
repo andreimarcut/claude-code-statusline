@@ -13,15 +13,25 @@ packaging/docs.
 
 ### Native binary mirror (`native/`)
 
-`native/src/main.rs` is a Rust reimplementation that must stay **byte-identical** to the
-script's output (it's an optional fast path; users may run either). If you change the
-**rendering** (fields, order, colors, glyphs, separators, formats), change BOTH and
-re-run the parity check — pipe the same envelopes through `statusline-command.sh`
-(with `CLAUDE_STATUSLINE_THROTTLE=0`) and the built binary and `diff`. Notes:
+A Rust reimplementation that must stay **byte-identical** to the script's output (optional
+fast path; users may run either). Layout:
+- `native/src/lib.rs` — all the logic: JSON parser + `render(input, now)` (and the
+  benchable pieces `parse`, `render_parsed`, `render_bar`). `render` is **pure** — `now`
+  is passed in, not read from the clock — so it's deterministic and testable.
+- `native/src/main.rs` — thin: read stdin → `render` → write. **Keep it clear** (no logic).
+- `native/src/bin/bench.rs` — a SEPARATE `bench` bin (not wired into `main`) that times
+  each stage with warmup + `black_box`. Run: `cargo run --release --bin bench`.
+
+If you change the **rendering** (fields, order, colors, glyphs, separators, formats),
+change BOTH `statusline-command.sh` and `lib.rs`, then run `./parity-check.sh` (it diffs
+the script with `CLAUDE_STATUSLINE_THROTTLE=0` against the built binary across 14 envelopes).
+Notes:
 - The binary intentionally has **no throttle** (sub-ms render; a cache round-trip would
   only add cost) and **omits the legacy transcript ctx fallback** (pre-2.1.132 only).
 - Zero external crates by design (offline build, tiny binary) — keep it dependency-free;
-  the hand-written parser in `main.rs` is a proper recursive-descent parser, not regex.
+  the parser in `lib.rs` is a proper recursive-descent parser, not regex.
+- The logic is ~7 µs/call; ~99% of a real invocation is process startup, so don't bother
+  micro-optimizing the code — there's nothing there to win.
 - Build: `cargo build --release --manifest-path native/Cargo.toml`.
 
 ## Install it for the user

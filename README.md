@@ -228,7 +228,30 @@ not the binary.)
 
 Requires a Rust toolchain (`cargo`). The binary is platform-specific, so `install.sh`
 builds it locally; if `cargo` is absent it falls back to the bash script. The script and
-binary are kept in lockstep — a parity check pipes the same envelopes through both.
+binary are kept in lockstep — `./parity-check.sh` pipes the same envelopes through both.
+
+### Where the ~0.8 ms actually goes
+
+The logic is essentially free — almost the entire cost is *being a process*. The code lives
+in [`native/src/lib.rs`](native/src/lib.rs) (a thin [`main.rs`](native/src/main.rs) just
+reads stdin → `render()` → writes), and a separate bench bin times each stage:
+
+```bash
+cargo run --release --bin bench --manifest-path native/Cargo.toml
+```
+
+```
+parse JSON               3800 ns/op
+render_parsed (format)   2684 ns/op
+render (parse+format)    6830 ns/op   ← the whole logic: ~0.007 ms
+render_bar (one bar)      309 ns/op
+```
+
+So of a real ~0.77 ms invocation, the work is **~0.007 ms (~1%)**; the other **~99%** is OS
+process spawn + dynamic-linker library mapping (`libc`, `libgcc_s`, `ld.so`) + runtime init
+*before* `main()`. The only lever left is shrinking startup (e.g. a fully static `musl`
+build) — single microseconds, imperceptible. (`bench.sh` measures the full per-invocation
+wall; this Rust bench measures just the in-process logic.)
 
 ## Benchmark
 
