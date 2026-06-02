@@ -195,10 +195,14 @@ binary are kept in lockstep — a parity check pipes the same envelopes through 
 Measure execution time, CPU, peak RAM, and forks on your machine:
 
 ```bash
-./bench.sh                       # 200 iterations, auto-finds the installed script
+./bench.sh                       # 200 iterations, auto-finds the installed target
 ./bench.sh 500                   # custom iteration count
-./bench.sh 500 ./statusline-command.sh
+./bench.sh 500 ./statusline-command.sh   # explicit script OR native binary
+./bench.sh --native              # build native/ if needed, then benchmark it
 ```
+
+`bench.sh` auto-detects whether the target is the bash script or the native binary and
+adjusts (the binary has no throttle and zero forks).
 
 Example output:
 
