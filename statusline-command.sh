@@ -40,8 +40,11 @@ THROTTLE="${CLAUDE_STATUSLINE_THROTTLE:-2}"
 [[ "$THROTTLE" =~ ^[0-9]+$ ]] || THROTTLE=0
 THROTTLE_CACHE=""
 if [ "$THROTTLE" -gt 0 ]; then
+  # Constrain the captured id to a filesystem-safe class so a `/` or `..`
+  # can't be smuggled into the cache path (defense-in-depth: session_id is
+  # a Claude-Code-issued UUID, but never trust external input in a path).
   _sid="default"
-  [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]] && _sid="${BASH_REMATCH[1]}"
+  [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([A-Za-z0-9_-]{1,64})\" ]] && _sid="${BASH_REMATCH[1]}"
   THROTTLE_CACHE="${TMPDIR:-/tmp}/claude-statusline-out-${_sid}"
   if [ -r "$THROTTLE_CACHE" ]; then
     IFS= read -r _ts < "$THROTTLE_CACHE" || _ts=""
