@@ -28,7 +28,7 @@ if [ -z "$TARGET" ]; then
     if [ ! -x "$TARGET" ]; then
       command -v cargo >/dev/null || { echo "error: cargo needed to build the native binary" >&2; exit 1; }
       echo "→ building native binary…"
-      cargo build --release --manifest-path "$HERE/native/Cargo.toml" >/dev/null
+      ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml >/dev/null )
     fi
   elif [ -x "$HOME/.claude/statusline-command.sh" ]; then
     TARGET="$HOME/.claude/statusline-command.sh"

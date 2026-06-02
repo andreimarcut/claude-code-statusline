@@ -43,7 +43,8 @@ command_str="bash ~/.claude/statusline-command.sh"
 if [ "$NATIVE" = 1 ]; then
   if command -v cargo >/dev/null; then
     echo "→ building native binary (cargo build --release)…"
-    cargo build --release --manifest-path "$HERE/native/Cargo.toml"
+    # Run from the repo root so .cargo/config.toml (static linking) is found.
+    ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml )
     cp "$HERE/native/target/release/claude-statusline" "$BIN_DST"
     chmod +x "$BIN_DST"
     command_str="~/.claude/claude-statusline"

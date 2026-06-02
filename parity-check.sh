@@ -9,7 +9,7 @@ BIN="$HERE/native/target/release/claude-statusline"
 
 command -v jq >/dev/null   || { echo "need jq"; exit 1; }
 command -v cargo >/dev/null || { echo "need cargo"; exit 1; }
-[ -x "$BIN" ] || cargo build --release --manifest-path "$HERE/native/Cargo.toml" >/dev/null
+[ -x "$BIN" ] || ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml >/dev/null )
 
 now=$(date +%s); pass=0; fail=0
 check() { # <label> <json>

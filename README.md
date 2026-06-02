@@ -200,19 +200,21 @@ binary.
 
 | | bash, full render | bash, throttled | **native binary** |
 |---|---|---|---|
-| Wall time | ~6 ms | ~1.7 ms | **~1.3 ms** (min ~0.9) |
+| Wall time | ~6 ms | ~1.7 ms | **~1.2 ms** (min ~0.8) |
 | Peak RAM | ~5.7 MB | ~3.4 MB | **~1–2 MB** |
 | Forks | 1 (`jq`) | 0 | **0** |
 
 It doesn't need the throttle (a full render is already sub-millisecond, so a cache
-round-trip would only add cost) — it always shows fresh values.
+round-trip would only add cost) — it always shows fresh values. The binary is
+**statically linked** (see [below](#where-the-time-goes--and-how-its-reduced)) so there's
+no dynamic linker at startup.
 
-Best of 6× `./bench.sh --native 5000` on Linux x86_64 (Ryzen):
+Best of `./bench.sh --native 5000` on Linux x86_64 (Ryzen):
 
 ```
-Wall time:  1.34 ms/run   (min 0.92, max 10.94)   [5000 runs in 6.70s]
-CPU time:   0.79 ms/run   (user+sys, summed over 5000 runs)
-CPU usage:  59% of one core while running   (CPU 3.94s / wall 6.70s)
+Wall time:  1.18 ms/run   (min 0.79, max 4.85)   [5000 runs in 5.91s]
+CPU time:   0.54 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  46% of one core while running   (CPU 2.72s / wall 5.91s)
             0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
 Peak RAM:   1.1 MB   (single process, transient — 0 resident between runs)
 External processes/run: 0  (no bash, no jq — single binary)
@@ -230,7 +232,7 @@ Requires a Rust toolchain (`cargo`). The binary is platform-specific, so `instal
 builds it locally; if `cargo` is absent it falls back to the bash script. The script and
 binary are kept in lockstep — `./parity-check.sh` pipes the same envelopes through both.
 
-### Where the ~0.8 ms actually goes
+### Where the time goes (and how it's reduced)
 
 The logic is essentially free — almost the entire cost is *being a process*. The code lives
 in [`native/src/lib.rs`](native/src/lib.rs) (a thin [`main.rs`](native/src/main.rs) just
@@ -247,11 +249,24 @@ render (parse+format)    6830 ns/op   ← the whole logic: ~0.007 ms
 render_bar (one bar)      309 ns/op
 ```
 
-So of a real ~0.77 ms invocation, the work is **~0.007 ms (~1%)**; the other **~99%** is OS
-process spawn + dynamic-linker library mapping (`libc`, `libgcc_s`, `ld.so`) + runtime init
-*before* `main()`. The only lever left is shrinking startup (e.g. a fully static `musl`
-build) — single microseconds, imperceptible. (`bench.sh` measures the full per-invocation
-wall; this Rust bench measures just the in-process logic.)
+So of a per-invocation wall, the work is **~0.007 ms**; essentially everything else is OS
+process spawn + **dynamic-linker** library mapping (`libc`, `libgcc_s`, `ld.so`) + runtime
+init *before* `main()`. That startup is the only thing worth attacking, and the main lever
+is **static linking** — no `ld.so`, no shared-library mapping or relocation at launch:
+
+| build | bare exec wall | startup |
+|---|---|---|
+| dynamic (PIE) | ~0.82 ms | maps libc + libgcc_s via ld.so |
+| **static glibc** (default here) | **~0.53 ms** | none — `statically linked` |
+| static + no-PIE | ~0.49 ms | none + no ASLR relocation |
+
+This repo builds **static by default** (`.cargo/config.toml` sets
+`-C target-feature=+crt-static`) — safe because the binary uses no NSS/DNS/`getpw*`. That's
+~35% off startup for free. Going further (no-PIE, or a fully-static `musl` target for
+portability across libc versions) saves only single microseconds — imperceptible. The
+remaining ~0.5 ms is the irreducible `execve` + kernel page setup + Rust runtime init.
+(`bench.sh` measures the full per-invocation wall, with some harness overhead; this Rust
+bench measures just the in-process logic.)
 
 ## Benchmark
 

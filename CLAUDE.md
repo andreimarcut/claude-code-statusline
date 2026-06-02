@@ -33,6 +33,10 @@ Notes:
 - The logic is ~7 µs/call; ~99% of a real invocation is process startup, so don't bother
   micro-optimizing the code — there's nothing there to win.
 - Build: `cargo build --release --manifest-path native/Cargo.toml`.
+- **Static linking**: `.cargo/config.toml` (repo root) sets `-C target-feature=+crt-static`
+  so the binary has no dynamic linker at startup (~35% faster spawn; safe — no NSS/DNS/getpw).
+  Cargo finds config by CWD, so always build with the repo root as CWD (the scripts use
+  `( cd "$HERE" && cargo … )`). It stays static as long as that config is honored.
 
 ## Install it for the user
 
