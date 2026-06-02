@@ -207,19 +207,18 @@ binary are kept in lockstep — a parity check pipes the same envelopes through 
 
 ## Benchmark
 
-Measure execution time, CPU, peak RAM, and forks on your machine:
+`bench.sh` measures wall time, CPU, CPU%, peak RAM, and forks. It **auto-detects** whether
+the target is the bash script or the native binary and adjusts accordingly. Higher
+iteration counts give steadier numbers. To compare the two fairly, run both back-to-back —
+same harness, same timing overhead.
+
+### Benchmark the bash script
 
 ```bash
-./bench.sh                       # 200 iterations, auto-finds the installed target
-./bench.sh 500                   # custom iteration count
-./bench.sh 500 ./statusline-command.sh   # explicit script OR native binary
-./bench.sh --native              # build native/ if needed, then benchmark it
+./bench.sh                                 # 200 iters, auto-finds the installed target
+./bench.sh 5000                            # more iterations = steadier
+./bench.sh 5000 ./statusline-command.sh    # an explicit script path
 ```
-
-`bench.sh` auto-detects whether the target is the bash script or the native binary and
-adjusts (the binary has no throttle and zero forks).
-
-Example output:
 
 ```
   (main metrics below = FULL render, throttle disabled)
@@ -236,10 +235,27 @@ Throttled fast-path: 2.5 ms/run   (cached reprint, no jq)
   external processes/run: 0  []
 ```
 
-The optional [native binary](#native-fast-path-optional) is faster still — ~0.9 ms,
-~2.3 MB, zero forks, no throttle needed.
+### Benchmark the native binary
 
-The main metrics measure the **full render** (throttle off) — the honest worst case: a
+```bash
+./bench.sh --native                        # builds native/ if needed, then benchmarks it
+./bench.sh --native 5000                   # more iterations
+./bench.sh 5000 ~/.claude/claude-statusline   # an already-installed binary
+```
+
+```
+Wall time:  1.34 ms/run   (min 0.92, max 10.94)   [5000 runs in 6.70s]
+CPU time:   0.79 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  59% of one core while running   (CPU 3.94s / wall 6.70s)
+            0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
+Peak RAM:   1.1 MB   (single process, transient — 0 resident between runs)
+External processes/run: 0  (no bash, no jq — single binary)
+```
+
+The native binary has no throttle and zero forks, so those sections are skipped for it.
+See [Native fast path](#native-fast-path-optional) for the side-by-side comparison.
+
+The script's main metrics measure the **full render** (throttle off) — the honest worst case: a
 single `jq` fork. The **throttled fast-path** is what a coalesced burst-call costs when the
 throttle is on and the cache is warm: ~2.6 ms and **zero forks** — it reads stdin with a
 bash builtin, matches the cache with a regex, reprints the last line, and never reaches
