@@ -96,7 +96,7 @@ awk -v cpu="$cpu_total_s" -v wall_us="$sum" -v n="$ITERS" 'BEGIN{
 poll_hwm() {
   "$@" >/dev/null 2>&1 & local p=$! m=0 k v _
   while [ -r "/proc/$p/status" ]; do
-    while read -r k v _; do [ "$k" = "VmHWM:" ] && [ "$v" -gt "$m" ] && m=$v; done < "/proc/$p/status" 2>/dev/null || true
+    while read -r k v _; do [ "$k" = "VmHWM:" ] && [ "$v" -gt "$m" ] && m=$v; done 2>/dev/null < "/proc/$p/status" || true
   done
   wait "$p" 2>/dev/null
   echo "$m"

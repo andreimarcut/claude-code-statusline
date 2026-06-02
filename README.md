@@ -178,15 +178,15 @@ Example output:
 ```
   (main metrics below = FULL render, throttle disabled)
 
-Wall time:  8.3 ms/run   (min 7.0, max 18.2)   [200 runs in 1.65s]
-CPU time:   8.4 ms/run   (user+sys, summed over 200 runs)
-CPU usage:  102% of one core while running   (CPU 1.68s / wall 1.65s)
-            0.014% of one core averaged at refreshInterval 60s (idle duty cycle)
+Wall time:  6.3 ms/run   (min 4.9, max 8.3)   [300 runs in 1.90s]
+CPU time:   6.0 ms/run   (user+sys, summed over 300 runs)
+CPU usage:  95% of one core while running   (CPU 1.81s / wall 1.90s)
+            0.010% of one core averaged at refreshInterval 60s (idle duty cycle)
 Peak RAM:   ~6.7 MB momentary  (bash 3.4 MB + jq 3.3 MB, both transient)
             (0 MB resident between runs — nothing stays alive)
 External processes/run: 1  [ 1 jq ]
 
-Throttled fast-path: 2.6 ms/run   (cached reprint, no jq)
+Throttled fast-path: 2.5 ms/run   (cached reprint, no jq)
   external processes/run: 0  []
 ```
 
@@ -209,15 +209,15 @@ little *over* 100% when the parent `bash` and the `jq` child briefly run on two 
 
 A *low* percentage here would actually be worse: it would mean the process spends its time
 blocked (on network/disk/another process) while taking longer in real time. **High
-utilization + short duration is ideal** — it does its work in one tight ~8 ms burst and
+utilization + short duration is ideal** — it does its work in one tight ~6 ms burst and
 exits.
 
-The number that reflects real system impact is the **duty cycle**: the script runs ~8 ms,
-then the core is free for the next ~60 s, so the time-averaged load is about **0.014% of
+The number that reflects real system impact is the **duty cycle**: the script runs ~6 ms,
+then the core is free for the next ~60 s, so the time-averaged load is about **0.010% of
 one core** at `refreshInterval: 60` (scales inversely with the interval). In short: *~100% =
-"efficient, no idle waiting, for 8 ms"; 0.014% = "negligible over time."*
+"efficient, no idle waiting, for 6 ms"; 0.010% = "negligible over time."*
 
-Each run is a short-lived process: ~8 ms, a few MB of RAM while it runs, **nothing
+Each run is a short-lived process: ~6 ms, a few MB of RAM while it runs, **nothing
 resident between runs**, and at most one fork (a single `jq` on a full render; zero on a
 throttled reprint — stdin is read with a bash builtin, not `cat`). At the default
 `refreshInterval: 60` that's a negligible, periodic blip. (Wall/CPU/RAM need bash 5+;

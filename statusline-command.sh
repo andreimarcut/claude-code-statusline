@@ -165,8 +165,8 @@ fi
 session_reset_in=""
 if [[ "$session_resets_at" =~ ^[0-9]+$ ]]; then
   diff=$(( session_resets_at - now ))   # `now` computed once, above
-  if   [ "$diff" -ge 3600 ]; then session_reset_in=$(printf '%dh%dm' "$((diff/3600))" "$(((diff%3600)/60))")
-  elif [ "$diff" -ge 60 ];   then session_reset_in=$(printf '%dm' "$((diff/60))")
+  if   [ "$diff" -ge 3600 ]; then printf -v session_reset_in '%dh%dm' "$((diff/3600))" "$(((diff%3600)/60))"
+  elif [ "$diff" -ge 60 ];   then printf -v session_reset_in '%dm' "$((diff/60))"
   elif [ "$diff" -gt 0 ];    then session_reset_in="${diff}s"
   fi
 fi
@@ -181,36 +181,37 @@ R=$'\033[0m'
 SEP="${D}·${R}"  # bullet separator
 
 # Color a percent number by severity: green<50, yellow<80, red>=80.
+# Writes the SGR escape into the named variable (no $() subshell fork).
+# Usage: pct_color <outvar> <n>
 pct_color() {
-  local n="$1"
-  if   [ "$n" -ge 80 ]; then printf '\033[91m'        # bright red
-  elif [ "$n" -ge 50 ]; then printf '\033[93m'        # yellow
-  else                       printf '\033[92m'; fi    # green
+  local -n _o="$1"; local n="$2"
+  if   [ "$n" -ge 80 ]; then _o=$'\033[91m'        # bright red
+  elif [ "$n" -ge 50 ]; then _o=$'\033[93m'        # yellow
+  else                       _o=$'\033[92m'; fi    # green
 }
 
 # Render a progress bar: a solid filled portion (█) + a dotted empty
 # portion (░), then the percentage. The fill color is a smooth gradient
 # keyed to the value — green when low, easing through yellow/orange to
 # red as it approaches full. Empty cells stay dim. Uses 256-color SGR.
-# Usage: render_bar <pct> [width]
+# Writes the bar into the named variable (no $() subshell fork).
+# Usage: render_bar <outvar> <pct> [width]
 DG=$'\033[32m'    # dim green (empty-cell dots)
 # 11-step green→red gradient (xterm-256 codes), indexed by pct/10.
 BAR_GRAD=(46 82 118 154 190 226 220 214 208 202 196)
+# Pre-rendered runs of block/dot glyphs (0..MAXW) so we don't loop per call.
+_BARW=5
+_FULL=(); _DOT=(); _f=""; _d=""
+for ((_i=0; _i<=_BARW; _i++)); do _FULL[_i]="$_f"; _DOT[_i]="$_d"; _f+="█"; _d+="░"; done
 render_bar() {
-  local pct="$1" width="${2:-5}"
+  local -n _out="$1"; local pct="$2" width="${3:-$_BARW}"
   [ "$pct" -gt 100 ] && pct=100
   [ "$pct" -lt 0 ]   && pct=0
   local filled=$(( (pct * width + 50) / 100 ))   # rounded
   [ "$filled" -gt "$width" ] && filled="$width"
-  local empty=$(( width - filled )) bar="" i
   local gi=$(( pct / 10 )); [ "$gi" -gt 10 ] && gi=10
   local fc; printf -v fc '\033[38;5;%dm' "${BAR_GRAD[gi]}"
-  bar+="$fc"
-  for ((i=0; i<filled; i++)); do bar+="█"; done
-  bar+="${DG}"
-  for ((i=0; i<empty; i++)); do bar+="░"; done
-  bar+="${R} ${W}${pct}%${R}"
-  printf '%s' "$bar"
+  _out="${fc}${_FULL[filled]}${DG}${_DOT[$(( width - filled ))]}${R} ${W}${pct}%${R}"
 }
 
 # ── Build segments ───────────────────────────────────────────────────
@@ -230,15 +231,16 @@ parts+=("${G}[${model_short}]${R}${effort_str}")
 # Each of these is a distinct field, separated by the uniform separator
 # below (the reset countdown stays glued to 5h as part of that field).
 # Cost goes last.
-[ -n "$ctx_pct" ] && parts+=("${W}ctx${R} $(render_bar "$ctx_pct")")
+if [ -n "$ctx_pct" ]; then render_bar _ctxbar "$ctx_pct"; parts+=("${W}ctx${R} $_ctxbar"); fi
 if [ -n "$session_pct" ]; then
-  five_seg="${W}5h${R} $(render_bar "$session_pct")"
+  render_bar _5hbar "$session_pct"
+  five_seg="${W}5h${R} $_5hbar"
   [ -n "$session_reset_in" ] && five_seg="${five_seg} ${D}↻${R}${W}${session_reset_in}${R}"
   parts+=("$five_seg")
 fi
 # Weekly quotas: all-models (wk) and Sonnet-only (son, when available).
-[ -n "$week_all_pct" ]    && parts+=("${W}wk${R} $(pct_color "$week_all_pct")${week_all_pct}%${R}")
-[ -n "$week_sonnet_pct" ] && parts+=("${W}son${R} $(pct_color "$week_sonnet_pct")${week_sonnet_pct}%${R}")
+if [ -n "$week_all_pct" ];    then pct_color _wkc "$week_all_pct";  parts+=("${W}wk${R} ${_wkc}${week_all_pct}%${R}"); fi
+if [ -n "$week_sonnet_pct" ]; then pct_color _snc "$week_sonnet_pct"; parts+=("${W}son${R} ${_snc}${week_sonnet_pct}%${R}"); fi
 [ -n "$duration_str" ] && parts+=("${C}${duration_str}${R}")
 [ -n "$cost_str" ] && parts+=("${Y}${cost_str}${R}")   # cost last
 
