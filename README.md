@@ -34,7 +34,31 @@ no network calls, no API tokens consumed.
 
 ## Install
 
-### Option A — one command
+### Option A — let Claude Code do it (easiest)
+
+Paste this prompt into Claude Code (from any directory) and let it handle everything —
+clone, install, and verify. It follows this repo's [`CLAUDE.md`](CLAUDE.md).
+
+```text
+Install the Claude Code status line from
+https://github.com/radumarias/claude-code-statusline
+
+Steps:
+1. Check that `jq` and bash 4.2+ are available; if not, tell me how to install
+   them for my OS and stop.
+2. Clone the repo into a temp directory (or reuse it if I'm already inside it).
+3. Run ./install.sh — it copies statusline-command.sh to ~/.claude/ and merges the
+   `statusLine` block into ~/.claude/settings.json (back it up first; preserve all my
+   other settings — only touch the .statusLine key).
+4. Verify: pipe a realistic sample envelope through ~/.claude/statusline-command.sh
+   and show me the rendered line, and print the resulting .statusLine from
+   ~/.claude/settings.json.
+5. Tell me to restart or interact with Claude Code to see it live.
+```
+
+> Prefer a different idle refresh? Add: "use refreshInterval 300" (seconds) to the prompt.
+
+### Option B — one command
 
 ```bash
 git clone https://github.com/radumarias/claude-code-statusline.git
@@ -46,7 +70,7 @@ This copies `statusline-command.sh` to `~/.claude/` and merges the `statusLine` 
 into `~/.claude/settings.json` (backing it up first, preserving all your other settings).
 Set a different idle refresh with `REFRESH_INTERVAL=300 ./install.sh`.
 
-### Option B — manual
+### Option C — manual
 
 1. Copy the script:
    ```bash
@@ -66,6 +90,19 @@ Set a different idle refresh with `REFRESH_INTERVAL=300 ./install.sh`.
 3. Restart Claude Code (or just interact) — it picks up the change on the next update.
 
 ### Verify
+
+**With Claude Code** — paste this if it's not showing or you want to confirm the install:
+
+```text
+Verify my Claude Code status line is installed correctly:
+- Confirm ~/.claude/statusline-command.sh exists and is executable.
+- Confirm ~/.claude/settings.json has a `statusLine` block pointing at it.
+- Pipe a sample JSON envelope through the script and show me the rendered line.
+- If anything is off (missing jq, bash too old, empty output, settings not applied),
+  diagnose and fix it.
+```
+
+**By hand:**
 
 ```bash
 echo '{"model":{"display_name":"Claude Opus 4.8"},"workspace":{"current_dir":"/home/me/proj"},"context_window":{"used_percentage":42},"cost":{"total_cost_usd":0.08,"total_duration_ms":423000},"rate_limits":{"five_hour":{"used_percentage":85},"seven_day":{"used_percentage":4}},"effort":{"level":"high"}}' \
