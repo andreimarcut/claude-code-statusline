@@ -26,6 +26,7 @@ no network calls, no API tokens consumed.
 
 - **bash 4.2+** (uses `printf '%(%s)T'` and float `printf`; macOS ships 3.2 — see note below)
 - **jq** (`brew install jq` / `apt install jq` / `pacman -S jq`)
+- *(optional)* **cargo** — only for the [native fast path](#native-fast-path-optional)
 
 > **macOS note:** the system bash is 3.2 and won't run this. Install a modern bash
 > (`brew install bash`) — the `statusLine.command` already invokes `bash` from your
@@ -68,7 +69,8 @@ cd claude-code-statusline
 
 This copies `statusline-command.sh` to `~/.claude/` and merges the `statusLine` block
 into `~/.claude/settings.json` (backing it up first, preserving all your other settings).
-Set a different idle refresh with `REFRESH_INTERVAL=300 ./install.sh`.
+Set a different idle refresh with `REFRESH_INTERVAL=300 ./install.sh`. Add `--native` to
+also build and use the [native binary](#native-fast-path-optional) (needs `cargo`).
 
 ### Option C — manual
 
@@ -163,6 +165,31 @@ else is a bash builtin — stdin is read with `read -d ''` (not `cat`), and ther
 `date`/`basename`/`awk`/`cksum`/`stat`/`git` fork. A full render is a single `jq`; a
 throttled reprint is zero forks. See the comments in `statusline-command.sh`.
 
+## Native fast path (optional)
+
+For the absolute minimum, the repo ships a tiny **Rust** reimplementation in
+[`native/`](native/) that's byte-identical to the script's output but runs as a single
+native binary — **no `bash`, no `jq`, no forks**. It builds with **zero external crates**
+(a small hand-written JSON parser), so `cargo build` works offline and produces a ~350 KB
+binary.
+
+| | bash, full render | bash, throttled | **native binary** |
+|---|---|---|---|
+| Wall time | ~6 ms | ~1.7 ms | **~0.9 ms** |
+| Peak RAM | ~5.7 MB | ~3.4 MB | **~2.3 MB** |
+| Forks | 1 (`jq`) | 0 | **0** |
+
+It doesn't need the throttle (a full render is already sub-millisecond, so a cache
+round-trip would only add cost) — it always shows fresh values.
+
+```bash
+./install.sh --native        # builds it, points Claude Code at ~/.claude/claude-statusline
+```
+
+Requires a Rust toolchain (`cargo`). The binary is platform-specific, so `install.sh`
+builds it locally; if `cargo` is absent it falls back to the bash script. The script and
+binary are kept in lockstep — a parity check pipes the same envelopes through both.
+
 ## Benchmark
 
 Measure execution time, CPU, peak RAM, and forks on your machine:
@@ -189,6 +216,9 @@ External processes/run: 1  [ 1 jq ]
 Throttled fast-path: 2.5 ms/run   (cached reprint, no jq)
   external processes/run: 0  []
 ```
+
+The optional [native binary](#native-fast-path-optional) is faster still — ~0.9 ms,
+~2.3 MB, zero forks, no throttle needed.
 
 The main metrics measure the **full render** (throttle off) — the honest worst case: a
 single `jq` fork. The **throttled fast-path** is what a coalesced burst-call costs when the

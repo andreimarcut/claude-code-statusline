@@ -11,6 +11,19 @@ style and the performance constraints below.
 Everything else (`install.sh`, `settings.example.json`, README, `EXTENDING.md`) is
 packaging/docs.
 
+### Native binary mirror (`native/`)
+
+`native/src/main.rs` is a Rust reimplementation that must stay **byte-identical** to the
+script's output (it's an optional fast path; users may run either). If you change the
+**rendering** (fields, order, colors, glyphs, separators, formats), change BOTH and
+re-run the parity check — pipe the same envelopes through `statusline-command.sh`
+(with `CLAUDE_STATUSLINE_THROTTLE=0`) and the built binary and `diff`. Notes:
+- The binary intentionally has **no throttle** (sub-ms render; a cache round-trip would
+  only add cost) and **omits the legacy transcript ctx fallback** (pre-2.1.132 only).
+- Zero external crates by design (offline build, tiny binary) — keep it dependency-free;
+  the hand-written parser in `main.rs` is a proper recursive-descent parser, not regex.
+- Build: `cargo build --release --manifest-path native/Cargo.toml`.
+
 ## Install it for the user
 
 Preferred: run `./install.sh` (copies the script to `~/.claude/statusline-command.sh`
