@@ -139,10 +139,35 @@ set up, modify, and extend the status line for you.
 
 ## How it's built (performance notes)
 
-It's deliberately cheap (~15 ms/run): the whole JSON envelope is parsed in **one** `jq`
-call (fields joined with an ASCII Unit Separator so absent fields don't shift columns),
-and every other helper is a bash builtin (no `date`/`basename`/`awk`/`cksum`/`stat`
-forks). There's no `git` call. See the comments in `statusline-command.sh`.
+It's deliberately cheap: the whole JSON envelope is parsed in **one** `jq` call (fields
+joined with an ASCII Unit Separator so absent fields don't shift columns), and every other
+helper is a bash builtin (no `date`/`basename`/`awk`/`cksum`/`stat` forks). There's no
+`git` call. See the comments in `statusline-command.sh`.
+
+## Benchmark
+
+Measure execution time, CPU, peak RAM, and forks on your machine:
+
+```bash
+./bench.sh                       # 200 iterations, auto-finds the installed script
+./bench.sh 500                   # custom iteration count
+./bench.sh 500 ./statusline-command.sh
+```
+
+Example output:
+
+```
+Wall time:  9.8 ms/run   (min 7.7, max 17.7)   [150 runs in 1.47s]
+CPU time:   10.4 ms/run  (user+sys, summed over 150 runs)
+Peak RAM:   ~6.2 MB momentary  (bash 3.4 MB + jq 2.9 MB, both transient)
+            (0 MB resident between runs — nothing stays alive)
+External processes/run: 2  [ 1 cat 1 jq ]
+```
+
+Each run is a short-lived process: ~10 ms, a few MB of RAM while it runs, **nothing
+resident between runs**, and only two forks (`cat` to read stdin + one `jq` to parse).
+At the default `refreshInterval: 60` that's a negligible, periodic blip. (Wall/CPU/RAM
+need bash 5+; peak-RAM and fork-count are Linux-only and degrade gracefully elsewhere.)
 
 ## Field reference
 

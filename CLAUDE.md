@@ -22,7 +22,8 @@ contains the block in `settings.example.json`. **Never blow away the user's sett
 read it, set only the `.statusLine` key (use `jq`), back it up first.
 
 Always verify after any change by piping a sample envelope through the script (see the
-"Verify" section of README.md) and showing the rendered line.
+"Verify" section of README.md) and showing the rendered line. After perf-relevant edits,
+run `./bench.sh` and report wall time / CPU / peak RAM / forks before and after.
 
 ## How the script works (so you edit it correctly)
 
