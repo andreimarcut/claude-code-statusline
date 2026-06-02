@@ -124,8 +124,8 @@ it keeps the elapsed-time and reset countdown current. Tune it:
 
 A few knobs without touching logic:
 
-- **Bar width** — `render_bar` defaults to 5 cells; pass a width, e.g.
-  `render_bar "$ctx_pct" 8`.
+- **Bar width** — change `_BARW=5` near the top (the precomputed `█`/`░` runs follow it),
+  or pass a width as `render_bar`'s 3rd arg: `render_bar _ctxbar "$ctx_pct" 8`.
 - **Separator** — fields are joined with a single space in the final loop
   (`line+=" "`). Swap for `"${SEP}"` (a dim `·`) or `"  "` (two spaces).
 - **Context window size fallback** — if your Claude Code is old enough that it doesn't
@@ -139,7 +139,7 @@ A few knobs without touching logic:
 Claude Code re-runs the script on every event (each assistant message, etc.) plus the
 `refreshInterval` timer. To avoid re-rendering on every burst event, the script caches its
 last output per session and, if called again within `CLAUDE_STATUSLINE_THROTTLE` seconds,
-**reprints the cached line and exits before `jq`** — so a coalesced call costs ~2.6 ms and
+**reprints the cached line and exits before `jq`** — so a coalesced call costs ~2.5 ms and
 **zero forks** instead of a full render.
 
 - Default: **2 seconds**. Set the env var to change it, or to **`0` to disable** (always
