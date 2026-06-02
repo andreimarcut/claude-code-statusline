@@ -157,12 +157,18 @@ Measure execution time, CPU, peak RAM, and forks on your machine:
 Example output:
 
 ```
-Wall time:  9.8 ms/run   (min 7.7, max 17.7)   [150 runs in 1.47s]
-CPU time:   10.4 ms/run  (user+sys, summed over 150 runs)
-Peak RAM:   ~6.2 MB momentary  (bash 3.4 MB + jq 2.9 MB, both transient)
+Wall time:  9.8 ms/run   (min 7.7, max 15.9)   [150 runs in 1.46s]
+CPU time:   8.9 ms/run   (user+sys, summed over 150 runs)
+CPU usage:  92% of one core while running   (CPU 1.34s / wall 1.46s)
+            0.015% of one core averaged at refreshInterval 60s (idle duty cycle)
+Peak RAM:   ~6.7 MB momentary  (bash 3.4 MB + jq 3.3 MB, both transient)
             (0 MB resident between runs — nothing stays alive)
 External processes/run: 2  [ 1 cat 1 jq ]
 ```
+
+The script is CPU-bound for its brief life (~one core while the ~10 ms run lasts), but
+because it only runs periodically the **average** load is negligible — about **0.015% of
+one core** at `refreshInterval: 60`.
 
 Each run is a short-lived process: ~10 ms, a few MB of RAM while it runs, **nothing
 resident between runs**, and only two forks (`cat` to read stdin + one `jq` to parse).

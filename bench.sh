@@ -63,14 +63,22 @@ awk -v s="$sum" -v n="$ITERS" -v mn="$min" -v mx="$max" 'BEGIN{
   printf "Wall time:  %.1f ms/run   (min %.1f, max %.1f)   [%d runs in %.2fs]\n",
          s/n/1000, mn/1000, mx/1000, n, s/1000000 }'
 
-# ── CPU time (user+sys, via the `times` builtin) ─────────────────────
+# ── CPU time + usage % (user+sys, via the `times` builtin) ───────────
 cpu_line=$( { for ((i=0; i<ITERS; i++)); do printf '%s' "$PAYLOAD" | bash "$SCRIPT" >/dev/null; done; times; } 2>/dev/null | tail -1 )
-# `times` children line: "<u>m<u.s>s <s>m<s.s>s"
-awk -v line="$cpu_line" -v n="$ITERS" 'BEGIN{
+# `times` children line: "<u>m<u.s>s <s>m<s.s>s" → total CPU seconds.
+cpu_total_s=$(awk -v line="$cpu_line" 'BEGIN{
   split(line, a, " ");
   for (j in a) { m=a[j]; sub(/m.*/,"",m); s=a[j]; sub(/.*m/,"",s); sub(/s/,"",s); tot+=m*60+s }
-  if (tot>0) printf "CPU time:   %.1f ms/run   (user+sys, summed over %d runs)\n", tot*1000/n, n;
-  else print  "CPU time:   n/a" }'
+  printf "%.6f", tot }')
+# wall total for the same batch is `$sum` microseconds, from the loop above.
+awk -v cpu="$cpu_total_s" -v wall_us="$sum" -v n="$ITERS" 'BEGIN{
+  if (cpu<=0) { print "CPU time:   n/a"; exit }
+  wall=wall_us/1000000;
+  printf "CPU time:   %.1f ms/run   (user+sys, summed over %d runs)\n", cpu*1000/n, n;
+  printf "CPU usage:  %.0f%% of one core while running   (CPU %.2fs / wall %.2fs)\n",
+         cpu/wall*100, cpu, wall;
+  printf "            %.3f%% of one core averaged at refreshInterval 60s (idle duty cycle)\n",
+         (cpu/n)/60*100 }'
 
 # ── Peak RAM (Linux /proc) ───────────────────────────────────────────
 # The runs are sub-10ms, so we measure the two processes involved
