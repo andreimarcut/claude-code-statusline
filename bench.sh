@@ -70,15 +70,35 @@ echo "  sample out: $(runonce)"
 echo
 
 have_epoch=0; [ -n "${EPOCHREALTIME:-}" ] && have_epoch=1
-now_us() {
-  if [ "$have_epoch" = 1 ]; then local e=$EPOCHREALTIME; echo $(( ${e%.*} * 1000000 + 10#${e#*.} ))
-  else echo $(( $(date +%s%N 2>/dev/null || echo "$(date +%s)000000000") / 1000 )); fi
+# Capture "now" in microseconds into the variable named by $1. Uses `printf -v`
+# so there is NO command substitution: a per-iteration `t=$(now_us)` forks a
+# subshell, and at two samples per iteration that injects ~1 ms of bash-fork
+# overhead — enough to make /bin/true and a ~1 ms binary read as identical and to
+# bury every startup A/B (musl, opt-level) under harness noise. (The `10#` guard
+# parses the leading-zero fractional field as decimal, not octal.)
+# (internal var is __us, not e/s, so callers can pass "e"/"s" without shadowing it)
+if [ "$have_epoch" = 1 ]; then
+  now_us_to() { local __us=$EPOCHREALTIME; printf -v "$1" %s $(( ${__us%.*} * 1000000 + 10#${__us#*.} )); }
+else
+  now_us_to() { printf -v "$1" %s $(( $(date +%s%N 2>/dev/null || echo "$(date +%s)000000000") / 1000 )); }
+fi
+
+# Min wall-microseconds of "<cmd> < $ENVF" over <iters> spawns. MIN, not mean, is
+# the noise-resistant estimator for sub-millisecond spawn deltas (one scheduler
+# hiccup blows up the mean but not the min).
+min_us_of() {
+  local n=$1; shift; local mn=0 s e d i
+  for ((i=0; i<n; i++)); do
+    now_us_to s; "$@" < "$ENVF" >/dev/null 2>&1; now_us_to e
+    d=$(( e - s )); { [ "$i" = 0 ] || [ "$d" -lt "$mn" ]; } && mn=$d
+  done
+  printf '%s' "$mn"
 }
 
 # ── Wall time ────────────────────────────────────────────────────────
 min=0 max=0 sum=0
 for ((i=0; i<ITERS; i++)); do
-  s=$(now_us); runonce >/dev/null; e=$(now_us)
+  now_us_to s; runonce >/dev/null; now_us_to e
   d=$(( e - s )); sum=$(( sum + d ))
   [ "$i" = 0 ] && { min=$d; max=$d; }
   [ "$d" -lt "$min" ] && min=$d; [ "$d" -gt "$max" ] && max=$d
@@ -86,6 +106,28 @@ done
 awk -v s="$sum" -v n="$ITERS" -v mn="$min" -v mx="$max" 'BEGIN{
   printf "Wall time:  %.2f ms/run   (min %.2f, max %.2f)   [%d runs in %.2fs]\n",
          s/n/1000, mn/1000, mx/1000, n, s/1000000 }'
+
+# ── Spawn floor comparison: how much of the wall is "being a process" (native) ──
+# Times /usr/bin/true and `floor` (an empty-main Rust bin, same release profile +
+# static linking) next to the real binary. The point is that our binary spawns at
+# essentially the floor — the ~6 µs of logic is below the spawn-noise floor. Sub-ms
+# deltas are noisy, so we report the MIN (one scheduler hiccup wrecks a mean, not a
+# min). Note /usr/bin/true is usually *dynamically* linked, so our static binary can
+# spawn faster than it — that's the point, not a measurement error.
+if [ "$KIND" = native ]; then
+  FLOOR="$(dirname "$TARGET")/floor"; TRUE=""
+  for t in /usr/bin/true /bin/true; do [ -x "$t" ] && { TRUE=$t; break; }; done
+  if [ -n "$TRUE" ] && [ -x "$FLOOR" ]; then
+    an=$(( ITERS < 2000 ? ITERS : 2000 ))
+    at=$(min_us_of "$an" "$TRUE"); af=$(min_us_of "$an" "$FLOOR"); ab=$(min_us_of "$an" "$TARGET")
+    awk -v tr="$at" -v fl="$af" -v bn="$ab" -v n="$an" 'BEGIN{
+      printf "Spawn floor (min of %d; sub-ms deltas are noisy — min is the robust estimator):\n", n;
+      printf "  /usr/bin/true (system, usually dynamic): %.3f ms\n", tr/1000;
+      printf "  empty static Rust bin (floor):           %.3f ms\n", fl/1000;
+      printf "  this binary (read+parse+render+write):   %.3f ms\n", bn/1000;
+      printf "  → vs the empty static bin: %+.3f ms — the ~6 µs of logic is below spawn noise.\n", (bn-fl)/1000 }'
+  fi
+fi
 
 # ── CPU time + usage % ───────────────────────────────────────────────
 cpu_line=$( { for ((i=0; i<ITERS; i++)); do runonce >/dev/null; done; times; } 2>/dev/null | tail -1 )
@@ -134,7 +176,7 @@ if [ "$KIND" = script ]; then
   CLAUDE_STATUSLINE_THROTTLE=3600 bash "$TARGET" < "$ENVF" >/dev/null   # prime
   fsum=0
   for ((i=0; i<ITERS; i++)); do
-    s=$(now_us); CLAUDE_STATUSLINE_THROTTLE=3600 bash "$TARGET" < "$ENVF" >/dev/null; e=$(now_us); fsum=$(( fsum + e - s ))
+    now_us_to s; CLAUDE_STATUSLINE_THROTTLE=3600 bash "$TARGET" < "$ENVF" >/dev/null; now_us_to e; fsum=$(( fsum + e - s ))
   done
   awk -v s="$fsum" -v n="$ITERS" 'BEGIN{ printf "Throttled fast-path: %.2f ms/run   (cached reprint, no jq)\n", s/n/1000 }'
   rm -f "$cache"

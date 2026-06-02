@@ -5,11 +5,23 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SH="$HERE/statusline-command.sh"
-BIN="$HERE/native/target/release/claude-statusline"
+# Override with BIN=<path> to check a different artifact (e.g. the musl build).
+BIN="${BIN:-$HERE/native/target/release/claude-statusline}"
 
 command -v jq >/dev/null   || { echo "need jq"; exit 1; }
 command -v cargo >/dev/null || { echo "need cargo"; exit 1; }
-[ -x "$BIN" ] || ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml >/dev/null )
+if [ ! -x "$BIN" ]; then
+  # Build to match $BIN. A BIN like .../target/<triple>/release/claude-statusline
+  # implies a cross-target build (e.g. the musl artifact); derive --target from the
+  # path so the documented `BIN=…/x86_64-unknown-linux-musl/… ./parity-check.sh`
+  # workflow builds the right thing instead of the default host/glibc binary.
+  tgt=""
+  case "$BIN" in
+    */target/*/release/*) triple="${BIN#*/target/}"; tgt="--target ${triple%%/release/*}" ;;
+  esac
+  ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml $tgt >/dev/null )
+fi
+[ -x "$BIN" ] || { echo "error: $BIN not found after build" >&2; exit 1; }
 
 now=$(date +%s); pass=0; fail=0
 check() { # <label> <json>

@@ -195,13 +195,14 @@ throttled reprint is zero forks. See the comments in `statusline-command.sh`.
 For the absolute minimum, the repo ships a tiny **Rust** reimplementation in
 [`native/`](native/) that's byte-identical to the script's output but runs as a single
 native binary — **no `bash`, no `jq`, no forks**. It builds with **zero external crates**
-(a small hand-written JSON parser), so `cargo build` works offline and produces a ~350 KB
-binary.
+(a small hand-written JSON parser), so `cargo build` works offline. `install.sh --native`
+prefers the **musl** static target when it's installed, producing a **~431 KB** binary
+(vs ~1.07 MB on static glibc).
 
-| | bash, full render | bash, throttled | **native binary** |
+| | bash, full render | bash, throttled | **native binary** (musl) |
 |---|---|---|---|
-| Wall time | ~6 ms | ~1.7 ms | **~1.1 ms** (min ~0.6) |
-| Peak RAM | ~5.7 MB | ~3.4 MB | **~1–2 MB** |
+| Wall time | ~6 ms | ~2 ms | **~0.4 ms** (min ~0.34) |
+| Peak RAM | ~5.7 MB | ~3.4 MB | **<1 MB** |
 | Forks | 1 (`jq`) | 0 | **0** |
 
 It doesn't need the throttle (a full render is already sub-millisecond, so a cache
@@ -209,20 +210,26 @@ round-trip would only add cost) — it always shows fresh values. The binary is
 **statically linked** (see [below](#where-the-time-goes--and-how-its-reduced)) so there's
 no dynamic linker at startup.
 
-Best of `./bench.sh --native 5000` on Linux x86_64 (Ryzen):
+Example `./bench.sh --native 5000` (musl build) on Linux x86_64:
 
 ```
-Wall time:  1.10 ms/run   (min 0.63, max 3.81)   [5000 runs in 5.49s]
+Wall time:  0.53 ms/run   (min 0.36, max 2.05)   [5000 runs in 2.63s]
+Spawn floor (min of 2000; sub-ms deltas are noisy — min is the robust estimator):
+  /usr/bin/true (system, usually dynamic): 0.547 ms
+  empty static Rust bin (floor):           0.305 ms
+  this binary (read+parse+render+write):   0.412 ms
+  → vs the empty static bin: +0.107 ms — the ~6 µs of logic is below spawn noise.
 CPU time:   0.47 ms/run   (user+sys, summed over 5000 runs)
-CPU usage:  43% of one core while running   (CPU 2.37s / wall 5.49s)
+CPU usage:  89% of one core while running   (CPU 2.33s / wall 2.63s)
             0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   1.0 MB   (single process, transient — 0 resident between runs)
+Peak RAM:   0.0 MB   (single process, transient — 0 resident between runs)
 External processes/run: 0  (no bash, no jq — single binary)
 ```
 
-(The per-run wall includes the benchmark's own timing overhead; the `min ~0.6 ms` is closer
-to the binary's true single-shot cost. The occasional `max` spike is a scheduler hiccup,
-not the binary.)
+(`bench.sh` now captures `$EPOCHREALTIME` directly instead of `$(now_us)`, which used to
+fork a subshell twice per sample and inflate the figure to ~1.1 ms. The `min` is closest to
+the binary's true single-shot cost; a `max` spike is a scheduler hiccup, not the binary. The
+"Spawn floor" rows show it spawns at the empty-static-bin floor — the logic is invisible.)
 
 ```bash
 ./install.sh --native        # builds it, points Claude Code at ~/.claude/claude-statusline
@@ -243,30 +250,37 @@ cargo run --release --bin bench --manifest-path native/Cargo.toml
 ```
 
 ```
-parse JSON               3800 ns/op
-render_parsed (format)   2684 ns/op
-render (parse+format)    6830 ns/op   ← the whole logic: ~0.007 ms
-render_bar (one bar)      309 ns/op
+parse JSON               3150 ns/op
+render_parsed (format)   2580 ns/op
+render (parse+format)    5930 ns/op   ← the whole logic: ~0.006 ms
+render_bar (one bar)      290 ns/op
 ```
 
-So of a per-invocation wall, the work is **~0.007 ms**; essentially everything else is OS
+So of a per-invocation wall, the work is **~0.006 ms**; essentially everything else is OS
 process spawn + **dynamic-linker** library mapping (`libc`, `libgcc_s`, `ld.so`) + runtime
 init *before* `main()`. That startup is the only thing worth attacking, and the main lever
 is **static linking** — no `ld.so`, no shared-library mapping or relocation at launch:
 
-| build | bare exec wall | startup |
-|---|---|---|
-| dynamic (PIE) | ~0.82 ms | maps libc + libgcc_s via ld.so |
-| **static glibc** (default here) | **~0.53 ms** | none — `statically linked` |
-| static + no-PIE | ~0.49 ms | none + no ASLR relocation |
+| build | size | warm spawn (min) | startup |
+|---|---|---|---|
+| dynamic (PIE) | ~334 KB | ~0.57 ms | maps libc via `ld.so` every launch |
+| static glibc | ~1.07 MB | ~0.43 ms | no `ld.so`; 1475 + 23 self-relocs |
+| **static musl** (preferred) | **~431 KB** | **~0.34 ms** | no `ld.so`; 400 + 0 self-relocs |
 
-This repo builds **static by default** (`.cargo/config.toml` sets
-`-C target-feature=+crt-static`) — safe because the binary uses no NSS/DNS/`getpw*`. That's
-~35% off startup for free. Going further (no-PIE, or a fully-static `musl` target for
-portability across libc versions) saves only single microseconds — imperceptible. The
-remaining ~0.5 ms is the irreducible `execve` + kernel page setup + Rust runtime init.
-(`bench.sh` measures the full per-invocation wall, with some harness overhead; this Rust
-bench measures just the in-process logic.)
+This repo builds **static** (`.cargo/config.toml` sets `-C target-feature=+crt-static`,
+scoped to Linux) — safe because the binary uses no NSS/DNS/`getpw*` — which removes `ld.so`
+entirely (~25–35% off spawn). On top of that, `install.sh --native` prefers the **musl**
+static target when installed: a ~431 KB binary (2.5× smaller than static glibc's 1.07 MB —
+back to the original footprint) with far fewer startup self-relocations (`R_X86_64_RELATIVE`
+1475→400, `IRELATIVE` 23→0), measured **~10–20% faster warm spawn** (~0.05–0.09 ms — real and
+reproducible, though sub-0.1 ms, so footprint is the bigger win). Static **no-PIE** was
+measured and dropped (≈10 µs, below noise, and it costs ASLR). The rest (~0.34 ms) is the
+irreducible `execve` + kernel page setup + Rust init.
+
+> An earlier version of this section cited ~1.1 ms warm spawn — that was mostly the
+> **benchmark harness** forking a subshell twice per sample (`t=$(now_us)`). `bench.sh` now
+> captures `$EPOCHREALTIME` directly, so ~0.4 ms is the binary's real warm cost; the
+> in-process logic bench above is unaffected.
 
 ## Benchmark
 

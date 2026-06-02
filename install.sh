@@ -42,10 +42,27 @@ command_str="bash ~/.claude/statusline-command.sh"
 
 if [ "$NATIVE" = 1 ]; then
   if command -v cargo >/dev/null; then
-    echo "→ building native binary (cargo build --release)…"
+    # Prefer the musl static target when it's installed AND the host is x86_64-Linux:
+    # ~2.5x smaller binary and far fewer startup relocations than static glibc →
+    # measurably faster spawn. The host check matters because the musl target can be
+    # installed on a non-x86_64-Linux box (any dev who once cross-built for Linux) —
+    # without it, macOS aborts the build mid-install and aarch64-Linux silently
+    # installs an x86_64 ELF that fails with "exec format error" at runtime.
+    # Falls back to the host target (e.g. macOS, aarch64-Linux, or a box without the
+    # musl target), which is still statically linked on Linux. Add the target with:
+    #   rustup target add x86_64-unknown-linux-musl
+    target_flag=""
+    bin_path="$HERE/native/target/release/claude-statusline"
+    if [ "$(uname -sm)" = "Linux x86_64" ] && rustup target list --installed 2>/dev/null | grep -qx x86_64-unknown-linux-musl; then
+      target_flag="--target x86_64-unknown-linux-musl"
+      bin_path="$HERE/native/target/x86_64-unknown-linux-musl/release/claude-statusline"
+      echo "→ building native binary (musl static target)…"
+    else
+      echo "→ building native binary (host target)…"
+    fi
     # Run from the repo root so .cargo/config.toml (static linking) is found.
-    ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml )
-    cp "$HERE/native/target/release/claude-statusline" "$BIN_DST"
+    ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml $target_flag )
+    cp "$bin_path" "$BIN_DST"
     chmod +x "$BIN_DST"
     command_str="~/.claude/claude-statusline"
     echo "→ installed native binary to $BIN_DST"

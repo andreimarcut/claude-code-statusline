@@ -1,5 +1,11 @@
 # Static-link the native binary: no dynamic linker at startup (~40% faster
-# process spawn). Safe here — the binary uses no NSS/DNS/getpw. Applies to the
-# native/ crate (the only cargo project in this repo).
-[build]
+# process spawn). Safe here — the binary uses no NSS/DNS/getpw.
+#
+# Scoped to Linux (the cfg form, not a bare x86_64 triple, so aarch64-linux keeps
+# it too) so macOS — which ships no static libc and would only warn — doesn't
+# inherit it. musl already defaults to +crt-static, so this is a harmless no-op
+# on the musl target. NOTE: Cargo does not *merge* [build].rustflags with a
+# matching [target.*].rustflags — keep the flag in exactly one place.
+# Cargo finds this file by CWD, so always build with the repo root as CWD.
+[target.'cfg(target_os = "linux")']
 rustflags = ["-C", "target-feature=+crt-static"]

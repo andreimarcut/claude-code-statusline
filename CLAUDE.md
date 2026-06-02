@@ -19,32 +19,72 @@ fast path; users may run either). Layout:
   benchable pieces `parse`, `render_parsed`, `render_bar`). `render` is **pure** — `now`
   is passed in, not read from the clock — so it's deterministic and testable.
 - `native/src/main.rs` — thin: read stdin → `render` → write. **Keep it clear** (no logic).
+  Uses `#![no_main]` + a C `main` to skip std's `lang_start` (stack-overflow guard + SIGPIPE
+  handler) for startup-syscall savings; it therefore flushes stdout explicitly.
 - `native/src/bin/bench.rs` — a SEPARATE `bench` bin (not wired into `main`) that times
   each stage with warmup + `black_box`. Run: `cargo run --release --bin bench`.
+- `native/src/bin/floor.rs` — a dev-only empty-`main` bin (same release profile). `bench.sh`
+  times it between `/usr/bin/true` and the real binary to show spawn ≫ logic. Never shipped.
 
 If you change the **rendering** (fields, order, colors, glyphs, separators, formats),
 change BOTH `statusline-command.sh` and `lib.rs`, then run `./parity-check.sh` (it diffs
-the script with `CLAUDE_STATUSLINE_THROTTLE=0` against the built binary across 14 envelopes).
+the script with `CLAUDE_STATUSLINE_THROTTLE=0` against the built binary across 14 envelopes;
+`BIN=<path> ./parity-check.sh` checks a specific artifact, e.g. the musl build).
 Notes:
 - The binary intentionally has **no throttle** (sub-ms render; a cache round-trip would
   only add cost) and **omits the legacy transcript ctx fallback** (pre-2.1.132 only).
 - Zero external crates by design (offline build, tiny binary) — keep it dependency-free;
   the parser in `lib.rs` is a proper recursive-descent parser, not regex.
-- The logic is ~7 µs/call; ~99% of a real invocation is process startup, so don't bother
-  micro-optimizing the code — there's nothing there to win.
-- Build: `cargo build --release --manifest-path native/Cargo.toml`.
-- **Static linking**: `.cargo/config.toml` (repo root) sets `-C target-feature=+crt-static`
-  so the binary has no dynamic linker at startup (~35% faster spawn; safe — no NSS/DNS/getpw).
-  Cargo finds config by CWD, so always build with the repo root as CWD (the scripts use
-  `( cd "$HERE" && cargo … )`). It stays static as long as that config is honored.
+- The logic is ~6 µs/call; ~99% of a real invocation is process startup (warm spawn ~0.4 ms),
+  so don't bother micro-optimizing the code — there's nothing there to win. `bench.sh`'s
+  "Spawn floor" rows show the binary spawns at the empty-static-bin floor; logic is below noise.
+- Build: `cargo build --release --manifest-path native/Cargo.toml` (add `--target
+  x86_64-unknown-linux-musl` for the musl build). Always build with the repo root as CWD so
+  `.cargo/config.toml` is found (the scripts use `( cd "$HERE" && cargo … )`).
+- **Static linking**: `.cargo/config.toml` (repo root) sets `-C target-feature=+crt-static`,
+  scoped to `cfg(target_os = "linux")` (so macOS — no static libc — and aarch64-linux behave)
+  — no dynamic linker at startup; safe (no NSS/DNS/getpw). `install.sh --native` **prefers the
+  musl target when installed** (`rustup target add x86_64-unknown-linux-musl`): ~431 KB vs
+  ~1.07 MB glibc (2.5× smaller), RELATIVE relocs 1475→400 + IRELATIVE 23→0, and ~12% faster
+  warm spawn (~0.05 ms — real but sub-0.1 ms; footprint is the bigger win). It also requires
+  an x86_64-Linux host (`install.sh` gates on `uname -sm` so the target isn't picked on a
+  non-x86_64-Linux box). Falls back to the host target — still statically linked on Linux
+  hosts; macOS gets the default dynamic libSystem link (the `cfg(target_os = "linux")` scope
+  above excludes it).
+- **`bench.sh` timing**: it captures `$EPOCHREALTIME` into plain vars via `printf -v`. Do
+  NOT reintroduce `t=$(now_us)` command substitution — each `$(...)` forks a subshell, and at
+  two/iteration that adds ~0.5 ms of phantom overhead that buries every sub-ms A/B (this is
+  why the old harness reported ~1.1 ms for a binary that actually warm-spawns in ~0.4 ms).
+
+### Evaluated and rejected (don't re-explore — measured, not guessed)
+
+A multi-agent brainstorm vetted ~22 candidate optimizations against the ~0.4 ms warm spawn
+(logic is ~6 µs). Only the musl target moved real wall-clock; these were measured and
+**rejected** — don't re-propose without new evidence:
+- **Daemon/socket front-end or native session cache** — *net regression* (+0.5…+2.3 ms):
+  Claude Code still forks a client each call, and a warm cache round-trip ≈ the 6 µs render
+  it would replace. (A `SessionStart` `cat ~/.claude/claude-statusline >/dev/null` page-cache
+  prewarm for the cold first call is the only legitimate keep-resident lever.)
+- **`target-cpu=native` / PGO / `build-std`** — recompile only the 6 µs logic (can't touch
+  glibc's prebuilt IFUNC resolvers); PGO breaks the one-command offline build; `build-std`
+  is nightly (breaks stable-Rust). Keep them out of the default build.
+- **Static no-PIE** (`relocation-model=static`) — ~10 µs, sign not robust above noise, costs
+  ASLR; subsumed by musl (which already cuts relocations).
+- **Logic micro-opts** (single preallocated render `String`, gradient-escape consts,
+  pre-sized Vecs, `Cow`/zero-copy parser, `skip_value`, hand-rolled `itoa`) — all sub-noise;
+  `itoa`/integer-cents `%.2f` also **breaks parity** (round-half-away vs Rust/bash's
+  round-half-to-even). The in-process logic is not worth optimizing.
+- **Strip `.eh_frame` / `-z norelro` / self-provided `mem*`** — demand-paged dead bytes or
+  sub-µs; some flags break under rust-lld. No runtime payoff; subsumed by musl.
 
 ## Install it for the user
 
 **First, offer the choice (use AskUserQuestion): bash script vs native binary.**
 - **Script** (default, recommend this): needs `jq` + bash 4.2+, no build, portable,
   trivially auditable. ~6 ms / ~1.7 ms throttled, ~6 MB.
-- **Native**: ~1 ms, ~1–2 MB, zero forks — but needs `cargo` and a one-time build, and is
-  platform-specific. Pick only if the user wants the minimal footprint and has `cargo`.
+- **Native**: ~0.4 ms warm spawn, ~0.4 MB (musl) / ~1 MB (glibc), zero forks — but needs
+  `cargo` and a one-time build, and is platform-specific. `install.sh --native` prefers the
+  musl target when installed. Pick only if the user wants the minimal footprint and has `cargo`.
 Both render identically; the status line runs ≤ ~once/second, so the difference is
 footprint, not felt speed. Default to the script unless they ask otherwise; check the
 chosen front-end's prerequisites first and stop with install instructions if missing.
@@ -52,8 +92,9 @@ chosen front-end's prerequisites first and stop with install instructions if mis
 Then run the installer for their choice:
 - Script: `./install.sh` (copies the script to `~/.claude/statusline-command.sh`, merges
   the `statusLine` block, backs up settings first).
-- Native: `./install.sh --native` (also builds `native/` and points the command at
-  `~/.claude/claude-statusline`; falls back to the script if `cargo` is absent).
+- Native: `./install.sh --native` (builds `native/` — preferring the musl static target if
+  `rustup` has it — and points the command at `~/.claude/claude-statusline`; falls back to
+  the script if `cargo` is absent).
 `REFRESH_INTERVAL=<seconds> ./install.sh` sets the idle refresh either way.
 
 Manual equivalent — copy the script to `~/.claude/`, then ensure `~/.claude/settings.json`
