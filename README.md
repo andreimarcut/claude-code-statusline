@@ -175,12 +175,27 @@ binary.
 
 | | bash, full render | bash, throttled | **native binary** |
 |---|---|---|---|
-| Wall time | ~6 ms | ~1.7 ms | **~0.9 ms** |
-| Peak RAM | ~5.7 MB | ~3.4 MB | **~2.3 MB** |
+| Wall time | ~6 ms | ~1.7 ms | **~1.3 ms** (min ~0.9) |
+| Peak RAM | ~5.7 MB | ~3.4 MB | **~1–2 MB** |
 | Forks | 1 (`jq`) | 0 | **0** |
 
 It doesn't need the throttle (a full render is already sub-millisecond, so a cache
 round-trip would only add cost) — it always shows fresh values.
+
+Best of 6× `./bench.sh --native 5000` on Linux x86_64 (Ryzen):
+
+```
+Wall time:  1.34 ms/run   (min 0.92, max 10.94)   [5000 runs in 6.70s]
+CPU time:   0.79 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  59% of one core while running   (CPU 3.94s / wall 6.70s)
+            0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
+Peak RAM:   1.1 MB   (single process, transient — 0 resident between runs)
+External processes/run: 0  (no bash, no jq — single binary)
+```
+
+(The per-run wall includes the benchmark's own timing overhead; the `min ~0.9 ms` is closer
+to the binary's true single-shot cost. The occasional `max` spike is a scheduler hiccup,
+not the binary.)
 
 ```bash
 ./install.sh --native        # builds it, points Claude Code at ~/.claude/claude-statusline
