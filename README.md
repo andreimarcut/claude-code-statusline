@@ -35,26 +35,44 @@ no network calls, no API tokens consumed.
 
 ## Install
 
+### First, pick a front-end: script or native
+
+Both render the exact same line — choose how it runs:
+
+| | **Bash script** (default) | **Native binary** |
+|---|---|---|
+| Needs | `jq` + bash 4.2+ | a Rust toolchain (`cargo`) + a one-time build |
+| Build step | none | `cargo build` (done for you by `--native`) |
+| Portability | runs anywhere | platform-specific (build locally) |
+| Speed / RAM | ~6 ms (~1.7 ms throttled) / ~6 MB | ~1 ms / ~1–2 MB, zero forks |
+| Auditability | plain shell, read it in a glance | Rust source in [`native/`](native/) |
+
+**Recommendation: use the script.** The status line runs at most ~once a second, so the
+native edge is footprint, not felt speed — both are imperceptible. Choose native only if
+you specifically want the minimal footprint *and* have `cargo`. You can switch later by
+re-running the installer. Each method below lets you pick.
+
 ### Option A — let Claude Code do it (easiest)
 
 Paste this prompt into Claude Code (from any directory) and let it handle everything —
-clone, install, and verify. It follows this repo's [`CLAUDE.md`](CLAUDE.md).
+choice, clone, install, and verify. It follows this repo's [`CLAUDE.md`](CLAUDE.md).
 
 ```text
 Install the Claude Code status line from
 https://github.com/radumarias/claude-code-statusline
 
-Steps:
-1. Check that `jq` and bash 4.2+ are available; if not, tell me how to install
-   them for my OS and stop.
-2. Clone the repo into a temp directory (or reuse it if I'm already inside it).
-3. Run ./install.sh — it copies statusline-command.sh to ~/.claude/ and merges the
-   `statusLine` block into ~/.claude/settings.json (back it up first; preserve all my
-   other settings — only touch the .statusLine key).
-4. Verify: pipe a realistic sample envelope through ~/.claude/statusline-command.sh
-   and show me the rendered line, and print the resulting .statusLine from
-   ~/.claude/settings.json.
-5. Tell me to restart or interact with Claude Code to see it live.
+1. Ask me whether I want the bash SCRIPT (default; needs jq + bash 4.2+, no build) or
+   the NATIVE binary (~1ms, ~1-2MB, zero forks — but needs `cargo` and a one-time build,
+   and is platform-specific). Recommend the script unless I want the minimal footprint.
+2. Check the prerequisites for my choice; if something's missing, tell me how to install
+   it for my OS and stop.
+3. Clone the repo into a temp directory (or reuse it if I'm already inside it).
+4. Run `./install.sh` for the script, or `./install.sh --native` for the binary. It
+   installs to ~/.claude/ and merges the `statusLine` block into ~/.claude/settings.json
+   (back it up first; preserve all my other settings — touch only the .statusLine key).
+5. Verify: pipe a realistic sample envelope through the installed command and show me the
+   rendered line, plus the resulting .statusLine from ~/.claude/settings.json.
+6. Tell me to restart or interact with Claude Code to see it live.
 ```
 
 > Prefer a different idle refresh? Add: "use refreshInterval 300" (seconds) to the prompt.
@@ -64,13 +82,16 @@ Steps:
 ```bash
 git clone https://github.com/radumarias/claude-code-statusline.git
 cd claude-code-statusline
-./install.sh
+
+./install.sh            # bash script (default — needs jq + bash 4.2+, no build)
+# …or…
+./install.sh --native   # build & use the native binary (needs cargo)
 ```
 
-This copies `statusline-command.sh` to `~/.claude/` and merges the `statusLine` block
-into `~/.claude/settings.json` (backing it up first, preserving all your other settings).
-Set a different idle refresh with `REFRESH_INTERVAL=300 ./install.sh`. Add `--native` to
-also build and use the [native binary](#native-fast-path-optional) (needs `cargo`).
+Either way it installs to `~/.claude/` and merges the `statusLine` block into
+`~/.claude/settings.json` (backing it up first, preserving all your other settings).
+`--native` falls back to the script if `cargo` isn't found. Set a different idle refresh
+with `REFRESH_INTERVAL=300 ./install.sh`.
 
 ### Option C — manual
 
@@ -90,6 +111,10 @@ also build and use the [native binary](#native-fast-path-optional) (needs `cargo
    }
    ```
 3. Restart Claude Code (or just interact) — it picks up the change on the next update.
+
+For the **native binary** instead: `cargo build --release --manifest-path native/Cargo.toml`,
+copy `native/target/release/claude-statusline` to `~/.claude/`, and set the `statusLine`
+`command` to `~/.claude/claude-statusline` (drop the `bash` prefix).
 
 ### Verify
 

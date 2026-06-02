@@ -26,9 +26,21 @@ re-run the parity check — pipe the same envelopes through `statusline-command.
 
 ## Install it for the user
 
-Preferred: run `./install.sh` (copies the script to `~/.claude/statusline-command.sh`
-and merges the `statusLine` block into `~/.claude/settings.json`, backing it up first).
-`REFRESH_INTERVAL=<seconds> ./install.sh` sets the idle refresh.
+**First, offer the choice (use AskUserQuestion): bash script vs native binary.**
+- **Script** (default, recommend this): needs `jq` + bash 4.2+, no build, portable,
+  trivially auditable. ~6 ms / ~1.7 ms throttled, ~6 MB.
+- **Native**: ~1 ms, ~1–2 MB, zero forks — but needs `cargo` and a one-time build, and is
+  platform-specific. Pick only if the user wants the minimal footprint and has `cargo`.
+Both render identically; the status line runs ≤ ~once/second, so the difference is
+footprint, not felt speed. Default to the script unless they ask otherwise; check the
+chosen front-end's prerequisites first and stop with install instructions if missing.
+
+Then run the installer for their choice:
+- Script: `./install.sh` (copies the script to `~/.claude/statusline-command.sh`, merges
+  the `statusLine` block, backs up settings first).
+- Native: `./install.sh --native` (also builds `native/` and points the command at
+  `~/.claude/claude-statusline`; falls back to the script if `cargo` is absent).
+`REFRESH_INTERVAL=<seconds> ./install.sh` sets the idle refresh either way.
 
 Manual equivalent — copy the script to `~/.claude/`, then ensure `~/.claude/settings.json`
 contains the block in `settings.example.json`. **Never blow away the user's settings.json**:
