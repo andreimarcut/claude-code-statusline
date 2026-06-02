@@ -172,10 +172,18 @@ need bash 5+; peak-RAM and fork-count are Linux-only and degrade gracefully else
 ## Field reference
 
 All fields come from the [status line JSON input](https://code.claude.com/docs/en/statusline#available-data).
-The script reads: `model.display_name`, `effort.level`, `workspace.current_dir`/`cwd`,
-`context_window.used_percentage`, `cost.total_cost_usd`, `cost.total_duration_ms`,
-`rate_limits.five_hour.{used_percentage,resets_at}`, `rate_limits.seven_day.used_percentage`,
-and (when a future Claude Code version exposes it) a Sonnet-only weekly bucket.
+The script reads:
+
+- `model.display_name` — model name (shortened to Opus/Sonnet/Haiku)
+- `effort.level` — reasoning effort, color-coded
+- `workspace.current_dir` (falls back to `cwd`) — current folder
+- `context_window.used_percentage` — context bar
+- `cost.total_cost_usd` — session cost
+- `cost.total_duration_ms` — session elapsed time
+- `rate_limits.five_hour.used_percentage` — 5h usage bar
+- `rate_limits.five_hour.resets_at` — 5h reset countdown
+- `rate_limits.seven_day.used_percentage` — weekly (all-models) usage
+- Sonnet-only weekly bucket — shown if/when a future Claude Code version exposes it
 
 ## License
 
