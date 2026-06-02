@@ -166,9 +166,23 @@ Peak RAM:   ~6.7 MB momentary  (bash 3.4 MB + jq 3.3 MB, both transient)
 External processes/run: 2  [ 1 cat 1 jq ]
 ```
 
-The script is CPU-bound for its brief life (~one core while the ~10 ms run lasts), but
-because it only runs periodically the **average** load is negligible — about **0.015% of
-one core** at `refreshInterval: 60`.
+### Why is "CPU usage" ~97%?
+
+That number is **CPU time ÷ wall time during the run** — a ratio, not a sign the script
+is heavy. It's high because the script does pure computation with almost no waiting: `jq`
+parsing the envelope and bash formatting are CPU work, and the only I/O is reading a tiny
+stdin pipe. No network, no disk seeks, no `sleep`, no `git` — nothing that blocks. When a
+program never waits, wall time ≈ CPU time, so the ratio approaches 100%.
+
+A *low* percentage here would actually be worse: it would mean the process spends its time
+blocked (on network/disk/another process) while taking longer in real time. **High
+utilization + short duration is ideal** — it does its work in one tight ~10 ms burst and
+exits.
+
+The number that reflects real system impact is the **duty cycle**: the script runs ~10 ms,
+then the core is free for the next ~60 s, so the time-averaged load is about **0.015% of
+one core** at `refreshInterval: 60` (scales inversely with the interval). In short: *97% =
+"efficient, no idle waiting, for 10 ms"; 0.015% = "negligible over time."*
 
 Each run is a short-lived process: ~10 ms, a few MB of RAM while it runs, **nothing
 resident between runs**, and only two forks (`cat` to read stdin + one `jq` to parse).
