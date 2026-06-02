@@ -11,6 +11,10 @@
 # Linux-only (need /proc); they degrade gracefully elsewhere.
 set -u
 export LC_ALL=C   # ensure '.' decimal separator in EPOCHREALTIME
+# Measure the FULL render (worst case) for the main metrics — disable the
+# script's throttle so every iteration does the real work. The throttled
+# fast-path is measured separately at the end.
+export CLAUDE_STATUSLINE_THROTTLE=0
 
 ITERS="${1:-200}"
 SCRIPT="${2:-}"
@@ -38,6 +42,7 @@ echo "  script:     $SCRIPT"
 echo "  iterations: $ITERS"
 echo "  bash:       $BASH_VERSION"
 echo "  sample out: $(printf '%s' "$PAYLOAD" | bash "$SCRIPT")"
+echo "  (main metrics below = FULL render, throttle disabled)"
 echo
 
 # Helper: integer microseconds from EPOCHREALTIME ("sec.usec", 6 frac digits).
@@ -122,3 +127,30 @@ if command -v mktemp >/dev/null; then
   echo "External processes/run: $(wc -l < "$fc" | tr -d ' ')  [$(sort "$fc" | uniq -c | tr '\n' ' ' | tr -s ' ')]"
   rm -rf "$shim"
 fi
+
+# ── Throttled fast-path (reprint cached line, skips jq) ──────────────
+# How cheap a coalesced burst-call is when CLAUDE_STATUSLINE_THROTTLE > 0
+# and the cache is warm: just `cat` + a bash regex + a file read, no jq.
+echo
+cache_file="${TMPDIR:-/tmp}/claude-statusline-out-bench"   # session_id "bench"
+rm -f "$cache_file"
+printf '%s' "$PAYLOAD" | CLAUDE_STATUSLINE_THROTTLE=3600 bash "$SCRIPT" >/dev/null   # prime cache
+fsum=0
+for ((i=0; i<ITERS; i++)); do
+  s=$(now_us); printf '%s' "$PAYLOAD" | CLAUDE_STATUSLINE_THROTTLE=3600 bash "$SCRIPT" >/dev/null; e=$(now_us)
+  fsum=$(( fsum + e - s ))
+done
+awk -v s="$fsum" -v n="$ITERS" 'BEGIN{
+  printf "Throttled fast-path: %.1f ms/run   (cached reprint, no jq)\n", s/n/1000 }'
+if command -v mktemp >/dev/null; then
+  shim=$(mktemp -d); fc="$shim/.count"; : > "$fc"
+  for cmd in jq git date stat cksum basename awk cat tail cut sed; do
+    real=$(command -v "$cmd" 2>/dev/null) || continue
+    printf '#!/usr/bin/env bash\necho %s >> "%s"\nexec "%s" "$@"\n' "$cmd" "$fc" "$real" > "$shim/$cmd"
+    chmod +x "$shim/$cmd"
+  done
+  PATH="$shim:$PATH" CLAUDE_STATUSLINE_THROTTLE=3600 bash "$SCRIPT" >/dev/null <<<"$PAYLOAD"
+  echo "  external processes/run: $(wc -l < "$fc" | tr -d ' ')  [$(sort "$fc" | uniq -c | tr '\n' ' ' | tr -s ' ')]"
+  rm -rf "$shim"
+fi
+rm -f "$cache_file"

@@ -61,6 +61,10 @@ It targets ~15 ms/run because Claude Code calls it frequently. Preserve these:
 - **Change bar width / colors** → `render_bar` (default width 5) and the `BAR_GRAD`
   256-color gradient table.
 - **Idle refresh cadence** → `refreshInterval` in `settings.json` (seconds), not the script.
+- **Throttle** → the script reprints its cached line and exits before `jq` if called within
+  `CLAUDE_STATUSLINE_THROTTLE` seconds (default 2; `0` disables). Cache key = `session_id`
+  (pulled with a bash regex, no jq) → `$TMPDIR/claude-statusline-out-<session_id>`. If you
+  add the throttle logic anywhere, keep it BEFORE the `jq` parse or it saves nothing.
 - **Sonnet-only weekly %** → already wired: the `jq` step scans `rate_limits` for any key
   matching `sonnet` and shows a `son` segment if present. Current Claude Code does **not**
   put that bucket in the envelope (only `five_hour` + all-models `seven_day`), so it stays

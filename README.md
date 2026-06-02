@@ -132,6 +132,24 @@ A few knobs without touching logic:
   send `context_window.used_percentage`, the script estimates from the transcript using
   a 1M default; override with `CLAUDE_STATUSLINE_CTX_MAX=200000`.
 - **Colors** — see the `# ── Colors ──` block and the `BAR_GRAD` gradient table.
+- **Throttling** — see below.
+
+### Throttling
+
+Claude Code re-runs the script on every event (each assistant message, etc.) plus the
+`refreshInterval` timer. To avoid re-rendering on every burst event, the script caches its
+last output per session and, if called again within `CLAUDE_STATUSLINE_THROTTLE` seconds,
+**reprints the cached line and exits before `jq`** — so a coalesced call costs ~3.5 ms and
+one `cat` fork instead of a full render.
+
+- Default: **2 seconds**. Set the env var to change it, or to **`0` to disable** (always
+  full-render). Configure it in `~/.claude/settings.json`:
+  ```json
+  "env": { "CLAUDE_STATUSLINE_THROTTLE": "2" }
+  ```
+- Trade-off: within the window the line shows the *previous* values (up to N seconds
+  stale). At the default 2 s this is imperceptible; raise it to coalesce harder, lower or
+  `0` for always-fresh.
 
 See [`EXTENDING.md`](EXTENDING.md) for adding/removing fields, and
 [`CLAUDE.md`](CLAUDE.md) — open this repo in Claude Code and it already knows how to
@@ -157,22 +175,34 @@ Measure execution time, CPU, peak RAM, and forks on your machine:
 Example output:
 
 ```
-Wall time:  9.8 ms/run   (min 7.7, max 15.9)   [150 runs in 1.46s]
-CPU time:   8.9 ms/run   (user+sys, summed over 150 runs)
-CPU usage:  92% of one core while running   (CPU 1.34s / wall 1.46s)
-            0.015% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   ~6.7 MB momentary  (bash 3.4 MB + jq 3.3 MB, both transient)
+  (main metrics below = FULL render, throttle disabled)
+
+Wall time:  9.8 ms/run   (min 8.1, max 20.2)   [200 runs in 1.95s]
+CPU time:   10.1 ms/run  (user+sys, summed over 200 runs)
+CPU usage:  104% of one core while running   (CPU 2.02s / wall 1.95s)
+            0.017% of one core averaged at refreshInterval 60s (idle duty cycle)
+Peak RAM:   ~6.8 MB momentary  (bash 3.4 MB + jq 3.4 MB, both transient)
             (0 MB resident between runs — nothing stays alive)
 External processes/run: 2  [ 1 cat 1 jq ]
+
+Throttled fast-path: 3.5 ms/run   (cached reprint, no jq)
+  external processes/run: 1  [ 1 cat ]
 ```
 
-### Why is "CPU usage" ~97%?
+The main metrics measure the **full render** (throttle off) — the honest worst case. The
+**throttled fast-path** is what a coalesced burst-call costs when the throttle is on and
+the cache is warm: ~3.5 ms and a single `cat` fork, because it reprints the last line and
+skips `jq` entirely (see [Throttling](#throttling)). (CPU usage can read slightly over
+100% because the parent `bash` and the `jq` child briefly run on separate cores.)
+
+### Why is "CPU usage" ~100%?
 
 That number is **CPU time ÷ wall time during the run** — a ratio, not a sign the script
 is heavy. It's high because the script does pure computation with almost no waiting: `jq`
 parsing the envelope and bash formatting are CPU work, and the only I/O is reading a tiny
 stdin pipe. No network, no disk seeks, no `sleep`, no `git` — nothing that blocks. When a
-program never waits, wall time ≈ CPU time, so the ratio approaches 100%.
+program never waits, wall time ≈ CPU time, so the ratio approaches 100% (and can read a
+little *over* 100% when the parent `bash` and the `jq` child briefly run on two cores).
 
 A *low* percentage here would actually be worse: it would mean the process spends its time
 blocked (on network/disk/another process) while taking longer in real time. **High

@@ -23,6 +23,37 @@ set -u
 # piping, which blanks every field.
 input=$(cat)
 
+# Current epoch (builtin, no `date` fork). Used by the throttle below and
+# by the rate-limit reset countdown later.
+printf -v now '%(%s)T' -1
+
+# ── Throttle: bound how often the real work runs ─────────────────────
+# Claude Code re-invokes this script on every event (each assistant
+# message, etc.) plus the refreshInterval timer. To coalesce bursts, we
+# cache the last rendered line per session and, if it's younger than
+# CLAUDE_STATUSLINE_THROTTLE seconds, reprint it and exit BEFORE the jq
+# parse — so most invocations cost just `cat` + a bash-regex + a file read
+# (no jq). Set the env var to 0 to disable (always full-render).
+#   - session_id is pulled with a bash regex (no jq) to key the cache.
+#   - cache file: "<epoch>\n<rendered line>".
+THROTTLE="${CLAUDE_STATUSLINE_THROTTLE:-2}"
+[[ "$THROTTLE" =~ ^[0-9]+$ ]] || THROTTLE=0
+THROTTLE_CACHE=""
+if [ "$THROTTLE" -gt 0 ]; then
+  _sid="default"
+  [[ "$input" =~ \"session_id\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]] && _sid="${BASH_REMATCH[1]}"
+  THROTTLE_CACHE="${TMPDIR:-/tmp}/claude-statusline-out-${_sid}"
+  if [ -r "$THROTTLE_CACHE" ]; then
+    IFS= read -r _ts < "$THROTTLE_CACHE" || _ts=""
+    if [[ "$_ts" =~ ^[0-9]+$ ]] && [ "$(( now - _ts ))" -lt "$THROTTLE" ]; then
+      # Fresh enough: reprint the cached line, skip all the work.
+      { IFS= read -r _ts; IFS= read -r _cached; } < "$THROTTLE_CACHE"
+      printf '%s' "$_cached"
+      exit 0
+    fi
+  fi
+fi
+
 # ── Parse the whole envelope in ONE jq fork ──────────────────────────
 # Forking jq once per field (12×) dominated this script's runtime
 # (~48ms of ~73ms). Extract every field we need in a single jq call.
@@ -73,10 +104,6 @@ dir="$dir_cur"
 [ -z "$dir" ] && dir="$dir_cwd"
 [ -z "$dir" ] && dir="$PWD"
 project=${dir##*/}
-
-# Current epoch via bash's printf builtin (no `date` fork). Used below for
-# the rate-limit reset countdown.
-printf -v now '%(%s)T' -1
 
 # ── Context % ────────────────────────────────────────────────────────
 # Prefer Claude Code's own number — it knows the active context window
@@ -215,5 +242,8 @@ for i in "${!parts[@]}"; do
   [ "$i" -gt 0 ] && line+=" "
   line+="${parts[$i]}"
 done
+
+# Save for the throttle fast-path (cheap reprint on the next burst call).
+[ -n "$THROTTLE_CACHE" ] && printf '%s\n%s' "$now" "$line" > "$THROTTLE_CACHE" 2>/dev/null
 
 printf '%s' "$line"
