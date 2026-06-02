@@ -51,6 +51,13 @@ Notes:
   non-x86_64-Linux box). Falls back to the host target — still statically linked on Linux
   hosts; macOS gets the default dynamic libSystem link (the `cfg(target_os = "linux")` scope
   above excludes it).
+- **Static-link guardrail**: `parity-check.sh` hard-fails if the built binary is dynamically
+  linked, and `install.sh` warns at install time — so a lost `+crt-static` (e.g. building from
+  the wrong CWD) can't silently ship a slow dynamic binary.
+- **Absolute command path**: `install.sh --native` writes an ABSOLUTE path into `settings.json`
+  (`$CLAUDE_DIR/claude-statusline`, not `~/…`). A leading `~` is not execve-able, so it forces a
+  `/bin/sh` wrapper (~0.7–0.9 ms of bash startup) in front of the binary. The bash-script
+  front-end is invoked as `bash ~/…` so it keeps the `~` (a shell runs it anyway).
 - **`bench.sh` timing**: it captures `$EPOCHREALTIME` into plain vars via `printf -v`. Do
   NOT reintroduce `t=$(now_us)` command substitution — each `$(...)` forks a subshell, and at
   two/iteration that adds ~0.5 ms of phantom overhead that buries every sub-ms A/B (this is

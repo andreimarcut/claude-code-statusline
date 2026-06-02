@@ -114,7 +114,10 @@ with `REFRESH_INTERVAL=300 ./install.sh`.
 
 For the **native binary** instead: `cargo build --release --manifest-path native/Cargo.toml`,
 copy `native/target/release/claude-statusline` to `~/.claude/`, and set the `statusLine`
-`command` to `~/.claude/claude-statusline` (drop the `bash` prefix).
+`command` to the binary's **absolute** path, e.g. `/home/you/.claude/claude-statusline` (drop
+the `bash` prefix). Use an absolute path, **not** `~` — the kernel can't `execve` a `~`-prefixed
+command, so it would be routed through a slower `/bin/sh` wrapper. (`./install.sh --native`
+writes the absolute path for you.)
 
 ### Verify
 

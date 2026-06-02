@@ -23,6 +23,15 @@ if [ ! -x "$BIN" ]; then
 fi
 [ -x "$BIN" ] || { echo "error: $BIN not found after build" >&2; exit 1; }
 
+# Guardrail: the native binary must be statically linked — having no dynamic
+# linker at startup is its core performance property. Fail loudly if a build ever
+# regresses to dynamic linking (e.g. crt-static lost / built from the wrong CWD).
+if command -v file >/dev/null && file -b "$BIN" | grep -qi 'dynamically linked'; then
+  echo "FAIL: $BIN is dynamically linked (expected statically linked)." >&2
+  echo "  Fix: build from the repo root so .cargo/config.toml (+crt-static) applies." >&2
+  exit 1
+fi
+
 now=$(date +%s); pass=0; fail=0
 check() { # <label> <json>
   local a b

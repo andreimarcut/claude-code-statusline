@@ -64,7 +64,19 @@ if [ "$NATIVE" = 1 ]; then
     ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml $target_flag )
     cp "$bin_path" "$BIN_DST"
     chmod +x "$BIN_DST"
-    command_str="~/.claude/claude-statusline"
+    # Guardrail: the native path's whole point is no dynamic linker at startup.
+    # Warn loudly if a build regressed to dynamic linking (e.g. crt-static was lost
+    # because the build didn't run from the repo root, so .cargo/config.toml was
+    # not picked up). See parity-check.sh for the hard (CI) version of this check.
+    if command -v file >/dev/null && file -b "$BIN_DST" | grep -qi 'dynamically linked'; then
+      echo "! WARNING: native binary is DYNAMICALLY linked (expected static) — startup will be slower." >&2
+      echo "  Check .cargo/config.toml (-C target-feature=+crt-static) and build from the repo root." >&2
+    fi
+    # Use an ABSOLUTE path (no leading '~') so Claude Code can execve the binary
+    # directly instead of routing it through a shell. The kernel does not expand
+    # '~', so a '~'-prefixed command is not execve-able and forces a /bin/sh
+    # wrapper (~0.7–0.9 ms of bash startup — far larger than the binary itself).
+    command_str="$BIN_DST"
     echo "→ installed native binary to $BIN_DST"
   else
     echo "! cargo not found — skipping native build, using the bash script." >&2
