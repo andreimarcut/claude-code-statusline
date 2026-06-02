@@ -44,7 +44,7 @@ Both render the exact same line — choose how it runs:
 | Needs | `jq` + bash 4.2+ | a Rust toolchain (`cargo`) + a one-time build |
 | Build step | none | `cargo build` (done for you by `--native`) |
 | Portability | runs anywhere | platform-specific (build locally) |
-| Speed / RAM | ~6 ms (~1.7 ms throttled) / ~6 MB | ~0.4 ms / <1 MB, zero forks |
+| Speed / RAM | ~6 ms (~1.8 ms throttled) / ~6 MB | ~0.4 ms / <1 MB, zero forks |
 | Auditability | plain shell, read it in a glance | Rust source in [`native/`](native/) |
 
 **Recommendation: use the script.** The status line runs at most ~once a second, so the
@@ -166,7 +166,7 @@ A few knobs without touching logic:
 Claude Code re-runs the script on every event (each assistant message, etc.) plus the
 `refreshInterval` timer. To avoid re-rendering on every burst event, the script caches its
 last output per session and, if called again within `CLAUDE_STATUSLINE_THROTTLE` seconds,
-**reprints the cached line and exits before `jq`** — so a coalesced call costs ~2.5 ms and
+**reprints the cached line and exits before `jq`** — so a coalesced call costs ~1.8 ms and
 **zero forks** instead of a full render.
 
 - Default: **2 seconds**. Set the env var to change it, or to **`0` to disable** (always
@@ -201,8 +201,8 @@ prefers the **musl** static target when it's installed, producing a **~431 KB** 
 
 | | bash, full render | bash, throttled | **native binary** (musl) |
 |---|---|---|---|
-| Wall time | ~6 ms | ~2 ms | **~0.4 ms** (min ~0.34) |
-| Peak RAM | ~5.7 MB | ~3.4 MB | **<1 MB** |
+| Wall time | ~6 ms | ~1.8 ms | **~0.4 ms** (min ~0.34) |
+| Peak RAM | ~6.7 MB | ~3.5 MB | **<1 MB** |
 | Forks | 1 (`jq`) | 0 | **0** |
 
 It doesn't need the throttle (a full render is already sub-millisecond, so a cache
@@ -300,15 +300,15 @@ same harness, same timing overhead.
 ```
   (main metrics below = FULL render, throttle disabled)
 
-Wall time:  6.3 ms/run   (min 4.9, max 8.3)   [300 runs in 1.90s]
-CPU time:   6.0 ms/run   (user+sys, summed over 300 runs)
-CPU usage:  95% of one core while running   (CPU 1.81s / wall 1.90s)
+Wall time:  6.49 ms/run   (min 4.40, max 23.02)   [5000 runs in 32.46s]
+CPU time:   6.32 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  97% of one core while running   (CPU 31.61s / wall 32.46s)
             0.010% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   ~6.7 MB momentary  (bash 3.4 MB + jq 3.3 MB, both transient)
+Peak RAM:   ~6.7 MB momentary  (bash 3.6 MB + jq 3.1 MB, both transient)
             (0 MB resident between runs — nothing stays alive)
 External processes/run: 1  [ 1 jq ]
 
-Throttled fast-path: 2.5 ms/run   (cached reprint, no jq)
+Throttled fast-path: 1.84 ms/run   (cached reprint, no jq)
   external processes/run: 0  []
 ```
 

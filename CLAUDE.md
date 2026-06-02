@@ -81,7 +81,7 @@ A multi-agent brainstorm vetted ~22 candidate optimizations against the ~0.4 ms 
 
 **First, offer the choice (use AskUserQuestion): bash script vs native binary.**
 - **Script** (default, recommend this): needs `jq` + bash 4.2+, no build, portable,
-  trivially auditable. ~6 ms / ~1.7 ms throttled, ~6 MB.
+  trivially auditable. ~6 ms / ~1.8 ms throttled, ~6 MB.
 - **Native**: ~0.4 ms warm spawn, ~0.4 MB (musl) / ~1 MB (glibc), zero forks — but needs
   `cargo` and a one-time build, and is platform-specific. `install.sh --native` prefers the
   musl target when installed. Pick only if the user wants the minimal footprint and has `cargo`.
