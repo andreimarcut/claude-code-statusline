@@ -200,7 +200,7 @@ binary.
 
 | | bash, full render | bash, throttled | **native binary** |
 |---|---|---|---|
-| Wall time | ~6 ms | ~1.7 ms | **~1.2 ms** (min ~0.8) |
+| Wall time | ~6 ms | ~1.7 ms | **~1.1 ms** (min ~0.6) |
 | Peak RAM | ~5.7 MB | ~3.4 MB | **~1–2 MB** |
 | Forks | 1 (`jq`) | 0 | **0** |
 
@@ -212,11 +212,11 @@ no dynamic linker at startup.
 Best of `./bench.sh --native 5000` on Linux x86_64 (Ryzen):
 
 ```
-Wall time:  1.18 ms/run   (min 0.79, max 4.85)   [5000 runs in 5.91s]
-CPU time:   0.54 ms/run   (user+sys, summed over 5000 runs)
-CPU usage:  46% of one core while running   (CPU 2.72s / wall 5.91s)
+Wall time:  1.10 ms/run   (min 0.63, max 3.81)   [5000 runs in 5.49s]
+CPU time:   0.47 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  43% of one core while running   (CPU 2.37s / wall 5.49s)
             0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   1.1 MB   (single process, transient — 0 resident between runs)
+Peak RAM:   1.0 MB   (single process, transient — 0 resident between runs)
 External processes/run: 0  (no bash, no jq — single binary)
 ```
 
@@ -307,11 +307,11 @@ Throttled fast-path: 2.5 ms/run   (cached reprint, no jq)
 ```
 
 ```
-Wall time:  1.34 ms/run   (min 0.92, max 10.94)   [5000 runs in 6.70s]
-CPU time:   0.79 ms/run   (user+sys, summed over 5000 runs)
-CPU usage:  59% of one core while running   (CPU 3.94s / wall 6.70s)
+Wall time:  1.17 ms/run   (min 0.91, max 2.32)   [5000 runs in 5.83s]
+CPU time:   0.54 ms/run   (user+sys, summed over 5000 runs)
+CPU usage:  46% of one core while running   (CPU 2.70s / wall 5.83s)
             0.001% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   1.1 MB   (single process, transient — 0 resident between runs)
+Peak RAM:   1.0 MB   (single process, transient — 0 resident between runs)
 External processes/run: 0  (no bash, no jq — single binary)
 ```
 
