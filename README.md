@@ -303,15 +303,15 @@ same harness, same timing overhead.
 ```
   (main metrics below = FULL render, throttle disabled)
 
-Wall time:  6.49 ms/run   (min 4.40, max 23.02)   [5000 runs in 32.46s]
-CPU time:   6.32 ms/run   (user+sys, summed over 5000 runs)
-CPU usage:  97% of one core while running   (CPU 31.61s / wall 32.46s)
+Wall time:  5.87 ms/run   (min 4.72, max 8.98)   [300 runs in 1.76s]
+CPU time:   5.72 ms/run   (user+sys, summed over 300 runs)
+CPU usage:  97% of one core while running   (CPU 1.72s / wall 1.76s)
             0.010% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   ~6.7 MB momentary  (bash 3.6 MB + jq 3.1 MB, both transient)
+Peak RAM:   ~6.6 MB momentary  (bash 3.5 MB + jq 3.1 MB, both transient)
             (0 MB resident between runs — nothing stays alive)
 External processes/run: 1  [ 1 jq ]
 
-Throttled fast-path: 1.84 ms/run   (cached reprint, no jq)
+Throttled fast-path: 1.76 ms/run   (cached reprint, no jq)
   external processes/run: 0  []
 ```
 
