@@ -139,8 +139,8 @@ A few knobs without touching logic:
 Claude Code re-runs the script on every event (each assistant message, etc.) plus the
 `refreshInterval` timer. To avoid re-rendering on every burst event, the script caches its
 last output per session and, if called again within `CLAUDE_STATUSLINE_THROTTLE` seconds,
-**reprints the cached line and exits before `jq`** — so a coalesced call costs ~3.5 ms and
-one `cat` fork instead of a full render.
+**reprints the cached line and exits before `jq`** — so a coalesced call costs ~2.6 ms and
+**zero forks** instead of a full render.
 
 - Default: **2 seconds**. Set the env var to change it, or to **`0` to disable** (always
   full-render). Configure it in `~/.claude/settings.json`:
@@ -158,9 +158,10 @@ set up, modify, and extend the status line for you.
 ## How it's built (performance notes)
 
 It's deliberately cheap: the whole JSON envelope is parsed in **one** `jq` call (fields
-joined with an ASCII Unit Separator so absent fields don't shift columns), and every other
-helper is a bash builtin (no `date`/`basename`/`awk`/`cksum`/`stat` forks). There's no
-`git` call. See the comments in `statusline-command.sh`.
+joined with an ASCII Unit Separator so absent fields don't shift columns), and everything
+else is a bash builtin — stdin is read with `read -d ''` (not `cat`), and there's no
+`date`/`basename`/`awk`/`cksum`/`stat`/`git` fork. A full render is a single `jq`; a
+throttled reprint is zero forks. See the comments in `statusline-command.sh`.
 
 ## Benchmark
 
@@ -177,23 +178,25 @@ Example output:
 ```
   (main metrics below = FULL render, throttle disabled)
 
-Wall time:  9.8 ms/run   (min 8.1, max 20.2)   [200 runs in 1.95s]
-CPU time:   10.1 ms/run  (user+sys, summed over 200 runs)
-CPU usage:  104% of one core while running   (CPU 2.02s / wall 1.95s)
-            0.017% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   ~6.8 MB momentary  (bash 3.4 MB + jq 3.4 MB, both transient)
+Wall time:  8.3 ms/run   (min 7.0, max 18.2)   [200 runs in 1.65s]
+CPU time:   8.4 ms/run   (user+sys, summed over 200 runs)
+CPU usage:  102% of one core while running   (CPU 1.68s / wall 1.65s)
+            0.014% of one core averaged at refreshInterval 60s (idle duty cycle)
+Peak RAM:   ~6.7 MB momentary  (bash 3.4 MB + jq 3.3 MB, both transient)
             (0 MB resident between runs — nothing stays alive)
-External processes/run: 2  [ 1 cat 1 jq ]
+External processes/run: 1  [ 1 jq ]
 
-Throttled fast-path: 3.5 ms/run   (cached reprint, no jq)
-  external processes/run: 1  [ 1 cat ]
+Throttled fast-path: 2.6 ms/run   (cached reprint, no jq)
+  external processes/run: 0  []
 ```
 
-The main metrics measure the **full render** (throttle off) — the honest worst case. The
-**throttled fast-path** is what a coalesced burst-call costs when the throttle is on and
-the cache is warm: ~3.5 ms and a single `cat` fork, because it reprints the last line and
-skips `jq` entirely (see [Throttling](#throttling)). (CPU usage can read slightly over
-100% because the parent `bash` and the `jq` child briefly run on separate cores.)
+The main metrics measure the **full render** (throttle off) — the honest worst case: a
+single `jq` fork. The **throttled fast-path** is what a coalesced burst-call costs when the
+throttle is on and the cache is warm: ~2.6 ms and **zero forks** — it reads stdin with a
+bash builtin, matches the cache with a regex, reprints the last line, and never reaches
+`jq` (see [Throttling](#throttling)). What's left is almost entirely bash interpreter
+startup (~1.3 ms), which any shell-based status line pays. (CPU usage can read slightly
+over 100% because the parent `bash` and the `jq` child briefly run on separate cores.)
 
 ### Why is "CPU usage" ~100%?
 

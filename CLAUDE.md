@@ -27,8 +27,10 @@ run `./bench.sh` and report wall time / CPU / peak RAM / forks before and after.
 
 ## How the script works (so you edit it correctly)
 
-1. `input=$(cat)` reads the whole envelope. **Do not** change this to `$(</dev/stdin)` —
-   that reads empty under Claude Code's stdin piping and blanks every field.
+1. `IFS= read -rd '' input || true` reads the whole envelope with a builtin (no fork).
+   **Do not** change this to `$(</dev/stdin)` — that reads empty under Claude Code's stdin
+   piping and blanks every field. (`read -d ''` was verified to work against the live pipe;
+   `$(cat)` also works but adds a fork.)
 2. **One `jq` call** extracts all fields into bash variables. Fields are joined with an
    ASCII **Unit Separator (0x1f)**, not tab, because `IFS` treats tab as whitespace and
    would collapse consecutive separators, dropping absent fields and shifting every later

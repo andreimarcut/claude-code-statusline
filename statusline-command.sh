@@ -18,10 +18,12 @@
 
 set -u
 
-# Read the whole JSON envelope from stdin. `$(cat)` (one fork) is used
-# deliberately: `$(</dev/stdin)` reads empty under Claude Code's stdin
-# piping, which blanks every field.
-input=$(cat)
+# Read the whole JSON envelope from stdin with the `read` builtin (no
+# fork). `-d ''` reads until NUL — i.e. the entire stdin — and returns
+# non-zero at EOF, hence `|| true`. This replaces `$(cat)` (a fork) and,
+# unlike `$(</dev/stdin)` (which reads empty under Claude Code's piping),
+# reads the envelope correctly — verified against the live pipe.
+IFS= read -rd '' input || true
 
 # Current epoch (builtin, no `date` fork). Used by the throttle below and
 # by the rate-limit reset countdown later.
@@ -32,8 +34,8 @@ printf -v now '%(%s)T' -1
 # message, etc.) plus the refreshInterval timer. To coalesce bursts, we
 # cache the last rendered line per session and, if it's younger than
 # CLAUDE_STATUSLINE_THROTTLE seconds, reprint it and exit BEFORE the jq
-# parse — so most invocations cost just `cat` + a bash-regex + a file read
-# (no jq). Set the env var to 0 to disable (always full-render).
+# parse — so most invocations cost just a builtin stdin read + a bash regex
+# + a file read (no jq, zero forks). Set the env var to 0 to disable.
 #   - session_id is pulled with a bash regex (no jq) to key the cache.
 #   - cache file: "<epoch>\n<rendered line>".
 THROTTLE="${CLAUDE_STATUSLINE_THROTTLE:-2}"

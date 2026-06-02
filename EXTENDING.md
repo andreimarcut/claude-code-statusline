@@ -61,7 +61,8 @@ matching slot in **both** so the remaining variables stay aligned.
 ## Rules of thumb
 
 - **Keep `jq` array and `read` list in lockstep** (same count, same order).
-- **One fork only** (`jq`). Use bash builtins for everything else — see `CLAUDE.md`.
+- **One fork only** (`jq`) on a full render, zero on a throttled reprint. Use bash builtins
+  for everything else (stdin via `read -d ''`, not `cat`) — see `CLAUDE.md`.
 - **Guard numerics** with a regex before arithmetic/`printf` (`set -u` is on).
 - **Color helpers:** `pct_color <n>` (green/yellow/red by severity) for plain numbers;
   `render_bar <pct> [width]` for a gradient bar. Color vars: `G W D Y C R`, reset `R`.
