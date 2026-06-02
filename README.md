@@ -4,8 +4,10 @@ A compact, single-line [Claude Code](https://code.claude.com) status line that s
 model + effort, the current folder, **context** and **5-hour** usage as colored
 gradient bars, the weekly quota, elapsed time, and session cost.
 
+![Status line demo](assets/screenshot.png)
+
 ```
-[Opus] high [tmp] ctx █░░░░ 19% 5h ██░░░ 31% ↻3h49m wk 10% 1h16m $11.55
+[Opus] high [claude-code-statusline] ctx ▓▓░░░ 27% 5h ▓▓░░░ 30% ↻42m wk 6% 7m22s $4.55
 ```
 
 - **`[Opus] high`** — model (shortened) + reasoning effort, color-coded by level.
