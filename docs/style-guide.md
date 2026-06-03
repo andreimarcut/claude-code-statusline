@@ -106,3 +106,7 @@ Write like an enthusiastic, self-taught builder thinking out loud in public. You
 
 ---
 *Note on evidence: sources were rich for his own prose across Medium, dev.to, Substack, the rencfs README, and xorio.rs, with strong cross-source agreement on every major signal (journey framing, learner humility, ":)" over emoji, open-source/education idealism, preserved typos). The one consistent gap is the Rust.Careers interview (expired TLS cert, unreachable across multiple harvests) — his most quotable first-person Q&A — so the most polished/interview register is undersampled; everything above leans on his self-published voice, which is abundant and consistent.*
+
+---
+
+_Built with Claude Code._

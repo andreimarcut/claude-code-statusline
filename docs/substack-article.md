@@ -78,11 +78,9 @@ And honestly the best way to show you what I did is to just give you the prompt 
 > - most of the agents have them use Opus latest model but make some agents, randomly like 10-30% of them, use Sonnet latest model, for variety, and also have different effort levels selected for them also randomly between all agents like [high, xhigh, "ultracode", max]
 > - run this for 30m and show me the results
 
-(in Substack, format this as a code block)
-
 What's neat is that the brainstorm itself turned out to be an instance of the dynamic-workflow patterns, without me planning it that way. Fanning out to a swarm to generate ideas, adversarial verification to refute them, and generate-and-filter to curate down the survivors, those are the exact shapes.
 
-[Insert image: assets/six-workflow-patterns.png — The six dynamic-workflow patterns (credit: @trq212). The brainstorm leaned on Fanout-and-Synthesize, Generate-and-Filter, and Adversarial Verification.]
+[Insert image: assets/six-workflow-patterns.png — diagram of the six dynamic-workflow patterns]
 
 *The six dynamic-workflow patterns (credit: @trq212). The brainstorm leaned on Fanout-and-Synthesize, Generate-and-Filter, and Adversarial Verification.*
 
@@ -92,11 +90,11 @@ Of the 22: **6 kept, 16 rejected, and exactly one, the musl build, actually move
 
 The reject pile taught me more than the keep pile, so let me dump it here:
 
-- A **daemon behind a socket** to keep the program resident, the kind of "obvious" win you'd whiteboard in a meeting, measured **about 2.6× slower** (7.4 ms vs 3.3 ms). Claude Code forks a client process per call regardless, so you pay spawn cost *plus* a socket round-trip to replace six microseconds of work.
+- A **daemon behind a socket** to keep the program resident, the kind of "obvious" win you'd whiteboard in a meeting, measured **about 2.2× slower** (7.4 ms vs 3.3 ms). Claude Code forks a client process per call regardless, so you pay spawn cost *plus* a socket round-trip to replace six microseconds of work.
 - **Pinning the process to a CPU core** with taskset to reduce timing variance made the median latency roughly **10× worse** on a modern hybrid performance/efficiency-core CPU.
 - **target-cpu=native, profile-guided optimization, recompiling the standard library.** All of these only touch the six microseconds of logic, they can't touch glibc's precompiled internals, and they variously break the offline build or need nightly Rust.
 - **Static no-PIE** saved about 10 µs, below noise, and it costs you ASLR. Subsumed by musl anyway.
-- A dozen **logic micro-optimizations**, a single preallocated render string, gradient-escape constants, pre-sized vectors, a zero-copy parser, a hand-rolled number formatter. All sub-noise. And the hand-rolled number formatter had a worse sin, it **broke output parity**, because integer-cents arithmetic rounds half-away-from-zero while both Rust's and bash's formatting round half-to-*even*. A value like 2.675 would disagree.
+- A dozen **logic micro-optimizations**, a single preallocated render string, gradient-escape constants, pre-sized vectors, a zero-copy parser, a hand-rolled number formatter. All sub-noise. And the hand-rolled number formatter had a worse sin, it **broke output parity**, because integer-cents arithmetic rounds half-away-from-zero while both Rust's and bash's formatting round half-to-*even*. Values that land exactly on a rounding boundary would disagree.
 - **Stripping the unwind tables, disabling relro, providing our own memcpy.** Demand-paged dead bytes, or sub-microsecond. No real payoff, subsumed by musl.
 
 Six microseconds of logic. None of the code optimizations could ever matter, and the swarm proved it one refutation at a time. A good skeptic with a compiler is worth a hundred enthusiastic suggestions, I would imagine.
@@ -131,10 +129,12 @@ There's one thing about the refute stage that still nags at me a little. For all
 
 And the neat part is that dynamic workflows can already do this, no new feature required. You can hand each agent its own git **worktree**, so a refute-and-implement stage spins up one worktree per surviving candidate, implements that one optimization there, runs the benchmark inside that worktree, and reports its real numbers back. Then the final selection isn't a verdict at all, it's just whoever posted the best measured spawn time across all the worktrees. Worktree isolation means the candidates never step on each other, and the whole thing collapses back into the same fan-out then curate dance I already had, only now the "curate" step is reading wall-clock instead of reading arguments. And to be clear, you do *not* need a separate "agent teams" feature to pull this off, you can just instruct the dynamic workflow to do exactly that, in the prompt. That's the part I find genuinely exciting.
 
-Because honestly, Claude Code has been shipping a whole little family of these lately, and watching them line up is a treat: subagents, an agent view, agent teams (https://code.claude.com/docs/en/agents), programmatic MCP/API/CLI calls (similar in spirit to dynamic workflows but aimed at MCP, APIs, and CLIs, even generating CLIs), and now dynamic workflows, which is basically agent logic running *inside* the agent. That last one is the powerful one. It's what let me express the fan-out then refute then curate dance in the first place, and I would imagine it could express this worktree-benchmark-select loop just as naturally.
+Because honestly, Claude Code has been shipping a whole little family of these lately, and watching them line up is a treat: subagents, an agent view, agent teams (https://code.claude.com/docs/en/agent-teams), programmatic MCP/API/CLI calls (similar in spirit to dynamic workflows but aimed at MCP, APIs, and CLIs, even generating CLIs), and now dynamic workflows, which is basically agent logic running *inside* the agent. That last one is the powerful one. It's what let me express the fan-out then refute then curate dance in the first place, and I would imagine it could express this worktree-benchmark-select loop just as naturally.
 
 The full source, the benchmark harness, the parity checker, and the complete ledger of rejected optimizations are all in the repository: https://github.com/radumarias/claude-code-statusline. Feel free to fork it, change it, use it however you want. And if you've got a lever that genuinely beats the spawn floor, please write me, I'd love to see the measurement :)
 
 And a real thank you to the friends who heckled this thing into existence. To the one who asked for the config in the first place, that's the spark. And especially to the one who kept needling me about the speed, too slow, then fast but not the fastest, that ribbing is what drove the whole thing, every stage of it. It's funny how a couple of offhand messages in a group chat can hand you weeks of learning. Thank you :)
 
 Let the journey begin. To be continued…
+
+Built with Claude Code — the code, the benchmarks, the charts, and this essay.

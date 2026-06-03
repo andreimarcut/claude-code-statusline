@@ -11,15 +11,15 @@ https://code.claude.com/docs/en/statusline
 
 The docs show an example status line — two lines, model and folder and a little context bar — and honestly it looked nice.
 
-[Attach image: assets/default-statusline.png — Claude Code's default two-line status line — the docs example that started it]
+[Attach image: docs/assets/default-statusline.png — Claude Code's default two-line status line — the docs example that started it]
 
 And I got curious: could I make something similar, but one line and more compact?
 
-Honest aside: all of this was vibe coding. I do not generally encourage that — but for experiments, PoCs, and little learning projects, it is great. This was exactly that.
+Honest aside: all of this was vibe coding. I don't generally encourage that — but for experiments, PoCs, and little learning projects, it is great. This was exactly that.
 
 A friend asked me to send him the config, so I quickly spun up a GitHub repo with Claude Code to share it. Side note, Claude Code's install-by-prompt is lovely — you hand it a prompt plus a repo and it installs everything for you, no copy-paste dance.
 
-Then another friend in the same group said it was too slow :)) — and this was when it ran in ~5-15 ms. So I rewrote it in Rust. When it got down to ~1 ms, that same friend said: fast, you do not even feel it — but not the fastest it can be.
+Then another friend in the same group said it was too slow :)) — and this was when it ran in ~6 ms. So I rewrote it in Rust. When it got down to ~1 ms, that same friend said: fast, you don't even feel it — but not the fastest it can be.
 
 So I said "hold my beer," and went and ran a parallel brainstorm to push it even lower.
 
@@ -29,7 +29,7 @@ First it was a bash script. The early version forked jq twelve times, once per f
 
 Good enough for most people. But I wanted to know how low it could go, so I rewrote it in Rust. Hand-written JSON parser, zero dependencies, byte-for-byte identical output, checked across 14 envelopes.
 
-Here is where it got interesting. The Rust logic runs in ~6 microseconds. Six. The other ~99% of every call is just the OS spawning a process. You cannot out-code that — an empty fn main does not start any faster.
+Here is where it got interesting. The Rust logic runs in ~6 microseconds. Six. The other ~99% of every call is just the OS spawning a process. You can't out-code that — an empty fn main doesn't start any faster.
 
 So the real game was startup, not code:
 
@@ -58,22 +58,24 @@ And here is the actual prompt I kicked it off with, typos and all:
     - most of the agents have them use Opus latest model but make some agents, randomly like 10-30% of them, use Sonnet latest model, for variety, and also have different effort levels selected for them also randomly between all agents like [high, xhigh, "ultracode", max]
     - run this for 30m and show me the results
 
-The verdict on those 22 -> 6 kept, 16 rejected. And of the 6, only one actually moved the wall clock above noise: the musl build. A "keep the process resident behind a socket" idea ran ~2.6x slower (7.4 ms vs 3.3 ms). Pinning to a CPU core to cut variance made p50 latency ~10x worse on a hybrid CPU.
+The verdict on those 22 -> 6 kept, 16 rejected. And of the 6, only one actually moved the wall clock above noise: the musl build. A "keep the process resident behind a socket" idea ran ~2.2x slower (7.4 ms vs 3.3 ms). Pinning to a CPU core to cut variance made p50 latency ~10x worse on a hybrid CPU.
 
 But hey, the single biggest correction wasn't a speedup at all. My own benchmark was lying. It timed each run with a shell construct that forked two subshells per measurement, inflating the number by ~0.8 ms. The "1.1 ms" I had been reporting was mostly the ruler, not the thing. Real number -> ~0.4 ms.
 
-The honest takeaway, now right in the README -> the native edge is footprint, not felt speed. A status line that runs once a second does not care about 5 ms. Both versions are imperceptible.
+The honest takeaway, now right in the README -> the native edge is footprint, not felt speed. A status line that runs once a second doesn't care about 5 ms. Both versions are imperceptible.
 
-What I am taking with me -> measure the right layer (I optimized code for hours when 99% of the cost was the spawn). Validate the ruler before the thing you measure. And adversarial review beats brainstorming — the value wasn't the 169 ideas, it was the agents that killed most of them with evidence.
+What I'm taking with me -> measure the right layer (I optimized code for hours when 99% of the cost was the spawn). Validate the ruler before the thing you measure. And adversarial review beats brainstorming — the value wasn't the 169 ideas, it was the agents that killed most of them with evidence.
 
 Don't get me wrong, I love a fast binary. But sometimes the best optimization is the rigor to prove you don't need one.
 
-What I would try next: the refute stage stopped at argument — agents judged each candidate on paper. The natural next step is to let every surviving idea actually get built and benchmarked for real, in isolation, and pick the winner from measured data instead of a verdict. Dynamic workflows can already do this: give each agent its own git worktree, so a refute/implement stage spins up one worktree per candidate, implements it there, runs the benchmark in that worktree, and reports its numbers back, and the final pick is made from the real benchmark data across all the worktrees. And you do not need a separate "agent teams" feature for it — you can just instruct the dynamic workflow to do exactly that in the prompt.
+What I would try next: the refute stage stopped at argument — agents judged each candidate on paper. The natural next step is to let every surviving idea actually get built and benchmarked for real, in isolation, and pick the winner from measured data instead of a verdict. Dynamic workflows can already do this: give each agent its own git worktree, so a refute/implement stage spins up one worktree per candidate, implements it there, runs the benchmark in that worktree, and reports its numbers back, and the final pick is made from the real benchmark data across all the worktrees. And you don't need a separate "agent teams" feature for it — you can just instruct the dynamic workflow to do exactly that in the prompt.
 
-What I find genuinely exciting is the whole family Claude Code has been shipping — subagents, an agent view, agent teams (https://code.claude.com/docs/en/agents), programmatic MCP/API/CLI calls (similar in spirit to dynamic workflows but aimed at MCP/APIs/CLI and generating CLIs), and now dynamic workflows, which is basically agent logic running inside the agent. That last one is the powerful one: it is what let me express the fan-out -> refute -> curate dance, and it could express this worktree-benchmark-select loop just as naturally.
+What I find genuinely exciting is the whole family Claude Code has been shipping — subagents, an agent view, agent teams (https://code.claude.com/docs/en/agent-teams), programmatic MCP/API/CLI calls (similar in spirit to dynamic workflows but aimed at MCP/APIs/CLI and generating CLIs), and now dynamic workflows, which is basically agent logic running inside the agent. That last one is the powerful one: it's what let me express the fan-out -> refute -> curate dance, and it could express this worktree-benchmark-select loop just as naturally.
 
 And a real thank you to the friends who watched this unfold in the group — especially the one who kept heckling the speed. That ribbing is what drove the whole thing; without his "too slow" and then his "still not the fastest," I would never have gone down this rabbit hole, and it turned into the most fun I have had benchmarking in a long time :)
 
 The write-up, the bench harness, and the rejected-ideas ledger are all open source in the repo: https://github.com/radumarias/claude-code-statusline — Let the journey begin :)
 
 #Rust #Performance #SoftwareEngineering #Benchmarking #OpenSource
+
+Built with Claude Code — the code, the benchmarks, the charts, and this write-up.

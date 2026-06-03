@@ -49,7 +49,7 @@ So **~99% of every invocation is process spawn**; ~6 µs is the actual logic.
 
 ## The multi-agent brainstorm
 
-Invoked as an "ultracode" workflow: *launch agents to emit ideas, others to refute them.*
+Invoked as an "ultracode" workflow: *launch agents to emit ideas, others to refute them.* Run as **three parallel brainstorming sessions** — the 89 agents / 169 ideas / 22 candidates below are the combined funnel across them.
 - **89 agents**, mixed models/effort, run as: **Brainstorm** (120 ideas, 14 lenses) →
   **Debate** (+49, 6 angles = 169 raw) → **Curate** (→ 22 canonical) →
   **Refute** (each judged through 3 adversarial lenses — impact, constraint, measurability —
@@ -59,7 +59,7 @@ Invoked as an "ultracode" workflow: *launch agents to emit ideas, others to refu
   `gdb` catchpoints, `getrusage` fault counts) rather than reasoning in the abstract.
 
 ### Rejected (measured, not guessed) — don't re-propose without new evidence
-- **Daemon/socket front-end / native session cache** — *net regression* (~2.6× slower: 7.4 ms vs
+- **Daemon/socket front-end / native session cache** — *net regression* (~2.2× slower: 7.4 ms vs
   3.3 ms), because Claude Code forks a client each call anyway.
 - **`target-cpu=native` / PGO / `build-std`** — recompile only the 6 µs logic; PGO breaks the
   offline build; `build-std` is nightly.
@@ -83,3 +83,7 @@ spawn is **~0.4 ms**. *The biggest single correction wasn't a speedup — the be
 **Default to the bash script.** The status line runs ≤ ~once/second, so the native edge is
 **footprint, not felt speed** — both render byte-identically. Choose native only for minimal
 footprint when `cargo` is available.
+
+---
+
+_Built with Claude Code._

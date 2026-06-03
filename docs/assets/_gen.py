@@ -36,7 +36,7 @@ def rrect(d, box, r, fill):
     d.rounded_rectangle(box, radius=r * S, fill=fill)
 
 def footer(d):
-    center(d, W * S / 2, (H - 52) * S, "github.com/radumarias/claude-code-statusline",
+    center(d, W * S / 2, (H - 52) * S, "github.com/radumarias/claude-code-statusline   ·   made with Claude Code",
            f(MONO, 20), MUTED)
 
 # ---------------- 1. The journey (log-scale bars) ----------------
@@ -187,7 +187,7 @@ def funnel():
            "bigger spawn wins, outside the brainstorm:  static linking · no_main · absolute path (no /bin/sh)",
            f(MONO, 18), ACCENT)
     center(d, W * S / 2, 948 * S,
-           "rejected:  daemon front-end 2.6× slower · core-pinning 10× worse p50",
+           "rejected:  daemon front-end 2.2× slower · core-pinning 10× worse p50",
            f(MONO, 18), hx("#f85149"))
     footer(d)
     save(im, "03-funnel.png")

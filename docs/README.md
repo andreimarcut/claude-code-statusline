@@ -31,7 +31,7 @@ Square (1080×1080), dark/terminal-themed — built for the LinkedIn feed (carou
 | [`assets/01-journey.png`](assets/01-journey.png) | Hero: `73 ms → 0.34 ms`, bash→native, log scale, musl highlighted |
 | [`assets/02-where-time-goes.png`](assets/02-where-time-goes.png) | The hook: `~334 µs spawn (98%)` vs `~6 µs logic (2%)` |
 | [`assets/03-funnel.png`](assets/03-funnel.png) | `169 ideas → 22 → 6 → 1 (musl)` + the rejected dead-ends |
-| [`assets/six-workflow-patterns.png`](assets/six-workflow-patterns.png) | The dynamic-workflow patterns diagram (credit: @trq212) — referenced in the brainstorm section |
+| [`assets/six-workflow-patterns.png`](assets/six-workflow-patterns.png) | The dynamic-workflow patterns diagram (credit: @trq212) — referenced in the brainstorm section *Borrowed light-themed external figure, not part of the dark 1080×1080 chart set.* |
 | `assets/_gen.py` | Pillow script that renders charts 01–03 (re-run to tweak) |
 
 **LinkedIn suggestion:** lead with `01-journey.png`, or post 01→02→03 as a carousel (best reach).
@@ -44,7 +44,7 @@ rewrite revealed the real wall: the logic is **~6 µs** — ~99% of every run is
 So the wins moved to the spawn path: static linking (no `ld.so`), `#![no_main]` (skip
 `lang_start`), a **musl** static build (431 KB, ~0.34 ms warm spawn), and an absolute exec
 path (skip the `/bin/sh` wrapper). An **89-agent adversarial brainstorm** vetted 22 candidate
-optimizations and kept ~6 — only musl moved measurable wall-clock; a daemon idea was 2.6×
+optimizations and kept ~6 — only musl moved measurable wall-clock; a daemon idea was 2.2×
 *slower* and core-pinning was 10× *worse*. The biggest correction wasn't a speedup at all: the
 benchmark was forking subshells per sample and overcounting by ~0.6 ms. Honest bottom line:
 **the native edge is footprint, not felt speed** — the script stays the default.
@@ -55,3 +55,7 @@ benchmark was forking subshells per sample and overcounting by ~0.6 ms. Honest b
 - `devto-article.md` starts with `---` frontmatter (`published: false`) — flip to `true` when ready.
 - The posts overlap by design (same facts, different framing/length per platform); they're meant
   to be published independently, not read back-to-back.
+
+---
+
+_Built with Claude Code — these docs and the charts were generated via Claude Code dynamic workflows._

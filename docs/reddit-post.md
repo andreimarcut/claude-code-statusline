@@ -22,7 +22,7 @@ Honest aside: all of it was vibe coding. I do NOT generally encourage that — b
 
 A friend asked me to send him the config, so I quickly spun up a GitHub repo with Claude Code to share it. (Side note: Claude Code's install-by-prompt is lovely — you hand it a prompt plus a repo and it installs everything for you.) Then ANOTHER friend in the same group said it was too slow :)) — this when it ran in ~5-15 ms. So I rewrote it in Rust. When it got down to ~1 ms, that friend said: fast, you don't even feel it — but not the fastest it can be. So I said "hold my beer," and went and did the parallel brainstorm below to push it even lower.
 
-It all started as a tiny tool — a status line for Claude Code. It reads JSON on stdin, prints one colored line, exits. It runs *very* frequently, so startup cost actually matters. So it became an honest target for "how low can process startup go", and hey, the answer surprised me.
+The thing itself is tiny — a status line for Claude Code: it reads JSON on stdin, prints one colored line, exits. It runs *very* frequently, so startup cost actually matters — an honest target for "how low can process startup go", and hey, the answer surprised me.
 
 **Bash → native.** The original was a bash script that forked `jq` once per field, 12 times. That alone was ~48 ms of ~73 ms. So I collapsed it to one `jq` call plus bash builtins for everything else (`${var##*/}`, `printf '%(%s)T'`, `printf -v`, `IFS= read -rd ''`) → **~6 ms**, 1 fork. A session-keyed cache reprints in **~1.8 ms** with zero forks.
 
@@ -42,7 +42,7 @@ musl vs glibc is **2.5× smaller**, relocs 1475→400 and 23→0, and ~10–20% 
 
 Plus `#![no_main]` + a C `main` to skip std's `lang_start` (the stack-overflow guard + SIGPIPE handler; safe here because the line is `< PIPE_BUF`, one atomic `write`). And — *embarrassingly impactful* — writing an **absolute** path into the config so the OS `execve`s the binary directly instead of through a `/bin/sh` wrapper (**~0.7–0.9 ms**; a leading `~` isn't exec-able).
 
-**The 89-agent brainstorm.** I ran a structured multi-agent pass — agents propose optimizations, *other* agents adversarially try to refute each one, and everyone has to measure, not guess. Actually I ran THREE of these adversarial brainstorms in parallel, for variety and so they'd cross-check each other, so the ~89 agents and 169 ideas below are the totals across all three. I ran it with Claude Code's new [dynamic workflows](https://claude.com/blog/introducing-dynamic-workflows-in-claude-code) (the [launch post](https://x.com/trq212/status/2061907337154367865) has a nice diagram), which is what made the whole fan-out / refute / curate dance possible without me babysitting it.
+**The 89-agent brainstorm.** I ran a structured multi-agent pass — agents propose optimizations, *other* agents adversarially try to refute each one, and everyone has to measure, not guess. Actually I ran THREE of these adversarial brainstorms in parallel, for variety and so they'd cross-check each other, so the 89 agents and 169 ideas below are the totals across all three. I ran it with Claude Code's new [dynamic workflows](https://claude.com/blog/introducing-dynamic-workflows-in-claude-code) (the [launch post](https://x.com/trq212/status/2061907337154367865) has a nice diagram), which is what made the whole fan-out / refute / curate dance possible without me babysitting it.
 
 Here's the actual prompt I kicked it off with — typos and all, I'm leaving them in :)
 
@@ -64,7 +64,7 @@ It went: **Brainstorm** (120 ideas, 14 lenses) → **Debate** (+49, so 169 raw) 
 
 Result: **22 canonical → 6 kept, 16 rejected, and exactly one (musl) moved measurable wall-clock.** The reject pile, because that's the useful part:
 
-- **Daemon/socket front-end to keep it resident:** net regression, ~2.6× slower (7.4 ms vs 3.3 ms). Claude Code forks a client per call anyway, so you pay spawn cost *plus* a round-trip.
+- **Daemon/socket front-end to keep it resident:** net regression, ~2.2× slower (7.4 ms vs 3.3 ms). Claude Code forks a client per call anyway, so you pay spawn cost *plus* a round-trip.
 - **`taskset` core-pinning to cut variance:** made p50 **~10× worse** on a hybrid P/E-core CPU.
 - **`target-cpu=native` / PGO / `build-std`:** only recompile the 6 µs logic; can't touch glibc's prebuilt IFUNC resolvers; PGO breaks the one-command offline build; `build-std` is nightly.
 - **Static no-PIE, strip `.eh_frame`, `-z norelro`, self-provided `memcpy`:** all sub-noise or subsumed by musl, some cost ASLR/hardening.
@@ -82,6 +82,8 @@ And a big thank you to the friends who got me into this — the one who asked fo
 
 **What I'd try next.** The refute stage stopped at argument — the agents judged each candidate optimization on paper, and a verdict decided whether it survived. The natural next step is to let each surviving idea actually get *built and benchmarked* for real, in isolation, and then pick the winner from measured data instead of from a verdict. And the nice thing is dynamic workflows can already do this: you can give each agent its own `git worktree`, so a refute/implement stage spins up one worktree per candidate (`isolation: worktree`), implements the idea there, runs the benchmark in that worktree, and reports its numbers back — and the final selection is made from the real benchmark data across all the worktrees. You don't need a separate "agent teams" feature for this either — you can just instruct the dynamic workflow to do exactly that in the prompt.
 
-What I find genuinely exciting is that Claude Code has been shipping a whole family of these — subagents, an agent view, [agent teams](https://code.claude.com/docs/en/agents), programmatic MCP/API/CLI calls (similar in spirit to dynamic workflows but aimed at MCP/APIs/CLI / generating CLIs), and now dynamic workflows — which is basically agent logic running inside the agent. That last one is the powerful one: it's what let me express the fan-out → refute → curate dance, and I would imagine it could express this worktree-benchmark-select loop just as naturally. Let the journey begin. :)
+What I find genuinely exciting is that Claude Code has been shipping a whole family of these — subagents, an agent view, [agent teams](https://code.claude.com/docs/en/agent-teams), programmatic MCP/API/CLI calls (similar in spirit to dynamic workflows but aimed at MCP/APIs/CLI / generating CLIs), and now dynamic workflows — which is basically agent logic running inside the agent. That last one is the powerful one: it's what let me express the fan-out → refute → curate dance, and I would imagine it could express this worktree-benchmark-select loop just as naturally. Let the journey begin. :)
 
 The [repo](https://github.com/radumarias/claude-code-statusline) has the full bench harness, the parity checker, and the rejected-ideas ledger. Happy to answer questions about any of the numbers — especially if someone has a lever I missed that actually beats the `execve` floor, the speedup would be neat I would imagine. :)
+
+*Built with Claude Code — the code, the benchmarks, the charts, and this write-up.*
