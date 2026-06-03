@@ -8,6 +8,8 @@
 
 **Body:**
 
+> *Up front, to be fair: this post was written with Claude Code (AI) — as were the code, the benchmarks, and the charts. The voice is modeled on my own past, non-AI articles; the model followed a [style guide](https://github.com/radumarias/claude-code-statusline/blob/main/docs/style-guide.md) reverse-engineered from them. My human writing: [medium.com/@xorio42](https://medium.com/@xorio42).*
+
 Hi, I want to share something I learned the hard way, because honestly the dead-ends turned out more useful than the win.
 
 It all started by accident. I stumbled on the `/statusline` command in Claude Code and wanted to see what it was about. So I read the docs: https://code.claude.com/docs/en/statusline — and the docs show an example status line, two lines, that looked really nice.
@@ -89,5 +91,3 @@ And a big thank you to the friends who got me into this — the one who asked fo
 What I find genuinely exciting is that Claude Code has been shipping a whole family of these — subagents, an agent view, [agent teams](https://code.claude.com/docs/en/agent-teams), programmatic MCP/API/CLI calls (similar in spirit to dynamic workflows but aimed at MCP/APIs/CLI / generating CLIs), and now dynamic workflows — which is basically agent logic running inside the agent. That last one is the powerful one: it's what let me express the fan-out → refute → curate dance, and I would imagine it could express this worktree-benchmark-select loop just as naturally. Let the journey begin. :)
 
 The [repo](https://github.com/radumarias/claude-code-statusline) has the full bench harness, the parity checker, and the rejected-ideas ledger. Happy to answer questions about any of the numbers — especially if someone has a lever I missed that actually beats the `execve` floor, the speedup would be neat I would imagine. :)
-
-*Built with Claude Code — the code, the benchmarks, the charts, and this write-up.*

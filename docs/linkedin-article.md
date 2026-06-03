@@ -4,6 +4,8 @@
 
 ---
 
+A note up front, to be fair: this article was written with Claude Code (AI) — as were the status line, the benchmarks, and the charts. The voice, though, is modeled on my own past articles, which I write without AI; the model followed a style guide reverse-engineered from them. Style notes: https://github.com/radumarias/claude-code-statusline/blob/main/docs/style-guide.md · my non-AI writing: https://medium.com/@xorio42
+
 I spent way too long making a status line start 5 milliseconds faster. The most useful thing I learned was admitting most of that work didn't matter :)
 
 It all started by accident. I stumbled on the /statusline command in Claude Code and wanted to see what it was even about. So I read the docs:
@@ -79,5 +81,3 @@ And a real thank you to the friends who watched this unfold in the group — esp
 The write-up, the bench harness, and the rejected-ideas ledger are all open source in the repo: https://github.com/radumarias/claude-code-statusline — Let the journey begin :)
 
 #Rust #Performance #SoftwareEngineering #Benchmarking #OpenSource
-
-Built with Claude Code — the code, the benchmarks, the charts, and this write-up.

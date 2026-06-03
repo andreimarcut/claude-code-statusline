@@ -5,6 +5,8 @@ description: "A tiny Claude Code status line turned into my little learning proj
 tags: rust, performance, bash, cli
 ---
 
+> *Up front, to be fair: this article was written with Claude Code (AI) — as were the code, the benchmarks, and the charts. The voice is modeled on my own past, non-AI articles; the model followed a [style guide](https://github.com/radumarias/claude-code-statusline/blob/main/docs/style-guide.md) reverse-engineered from them. My human writing: [medium.com/@xorio42](https://medium.com/@xorio42).*
+
 Hi,
 
 It all started by accident. I stumbled on the `/statusline` command inside Claude Code one day and had no idea what it was about, so I went looking. I read the [docs](https://code.claude.com/docs/en/statusline), and right there at the top is an example **status line** — two lines, model and folder and a little context — and it looked really nice.
@@ -209,6 +211,5 @@ And one more time — thank you to the friends in that little group. To the one 
 Let the journey begin. To be continued…
 
 
-*Built with Claude Code — the code, the benchmarks, the charts, and this article.*
 
 <!-- dev.to note: the images (assets/default-statusline.png and assets/six-workflow-patterns.png) are paths relative to this file (they resolve to docs/assets/) so they render on GitHub. On dev.to you must upload each image and replace the path with the uploaded URL. -->

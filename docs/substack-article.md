@@ -8,6 +8,8 @@
 
 ### How a tiny status line for Claude Code took me from a bash script to a native Rust binary — and how I found out my own benchmark had been lying to me the whole time
 
+A note up front, to be fair: this essay was written with Claude Code (AI) — as were the status line, the benchmarks, and the charts. The voice, though, is modeled on my own past articles, which I write without AI; the model followed a style guide reverse-engineered from them. Style notes: https://github.com/radumarias/claude-code-statusline/blob/main/docs/style-guide.md · my non-AI writing: https://medium.com/@xorio42
+
 It all started by accident. I was poking around inside Claude Code and stumbled on the `/statusline` command, and I had no idea what it did, so I wanted to see what it was about. I read the docs to find out: https://code.claude.com/docs/en/statusline
 
 The docs show an example status line, two lines, and it looked nice.
@@ -142,5 +144,3 @@ The full source, the benchmark harness, the parity checker, and the complete led
 And a real thank you to the friends who heckled this thing into existence. To the one who asked for the config in the first place, that's the spark. And especially to the one who kept needling me about the speed, too slow, then fast but not the fastest, that ribbing is what drove the whole thing, every stage of it. It's funny how a couple of offhand messages in a group chat can hand you weeks of learning. Thank you :)
 
 Let the journey begin. To be continued…
-
-Built with Claude Code — the code, the benchmarks, the charts, and this essay.

@@ -6,11 +6,13 @@
 
 ---
 
+Up front: AI-written with Claude Code; the voice is modeled on my own past, non-AI articles (medium.com/@xorio42).
+
 It all started by accident :) I stumbled on the /statusline command in Claude Code and wanted to see what it was, so I read the docs: https://code.claude.com/docs/en/statusline
 
 [Attach image: assets/default-statusline.png — caption: "Claude Code's default two-line status line — the docs example that started it"]
 
-The docs show an example status line, two lines, that looked nice. I got curious: could I make something similar but one line and more compact? Honest aside — all of it was vibe coding. I don't generally encourage that, but for experiments, PoCs, and learning projects, it's great. A friend asked me to send the config, so I spun up a GitHub repo with Claude Code to share it (its install-by-prompt is lovely: a prompt + a repo, and it's all installed). Then another friend in the same group said it was too slow :)) — this when it ran in ~6 ms. So I rewrote it in Rust. When it got to ~1 ms, that friend said: fast, you don't even feel it — but not the fastest. So I said "hold my beer," and went to push it even lower.
+The docs show an example status line, two lines, that looked nice. I got curious: could I make something similar but one line and more compact? Honest aside — all of it was vibe coding. I don't generally encourage that, but for experiments, PoCs, and learning projects, it's great. A friend asked me to send the config, so I spun up a GitHub repo with Claude Code to share it (its install-by-prompt is lovely). Then another friend in the same group said it was too slow :)) — this when it ran in ~6 ms. So I rewrote it in Rust. When it got to ~1 ms, that friend said: fast, you don't even feel it — but not the fastest. So I said "hold my beer," and went to push it even lower.
 
 [Attach image: docs/assets/screenshot.png — What I built: one compact line — model, folder, context + 5-hour usage bars, weekly quota, elapsed time, and cost.]
 
@@ -33,12 +35,10 @@ But the single biggest correction wasn't a speedup at all — my own benchmark w
 
 The honest takeaway, now right in the README -> the native edge is footprint, not felt speed. A status line that runs once a second does not care about 5 ms.
 
-Three lessons: measure the right layer. Validate the ruler before the thing you measure. And adversarial review beats brainstorming — the value wasn't the 169 raw ideas, it was curating them to 22 and killing most of those with evidence.
+Three lessons: measure the right layer. Validate the ruler before the thing you measure. And adversarial review beats brainstorming — the value wasn't the 169 raw ideas, it was killing most of the 22 survivors with evidence.
 
 Thank you to the friends who pushed this along — especially the one who kept heckling the speed. That ribbing is what drove the whole thing :)
 
 Full write-up, bench harness, and the rejected-ideas ledger: https://github.com/radumarias/claude-code-statusline — Let the journey begin :)
-
-Built with Claude Code — code, benchmarks, charts, and this post.
 
 #Rust #Performance #Benchmarking #OpenSource
