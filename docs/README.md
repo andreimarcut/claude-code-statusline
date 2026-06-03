@@ -5,17 +5,36 @@ evolution, the **benchmarking**, **all the optimizations** (kept and rejected), 
 **89-agent adversarial brainstorm** used to find them.
 
 Synthesized from this repo's git history, `CLAUDE.md`/`README.md`, the `bench.sh`/`native/`
-sources, and the project's Claude Code session transcripts.
+sources, and the project's Claude Code session transcripts. The four posts are written in
+**Radu's own voice** — reverse-engineered from his published work (Medium, rencfs, xorio.rs,
+dev.to, Substack) into [`style-guide.md`](style-guide.md) — and each is shaped to the format
+its platform actually renders (see the table).
 
 ## Files
 
 | File | Platform | Length / tone |
 |---|---|---|
-| [`linkedin-post.md`](linkedin-post.md) | LinkedIn | Short, story-driven, professional. Lessons-forward. |
+| [`linkedin-post.md`](linkedin-post.md) | LinkedIn **feed** | Tight (~2,360 chars, under the ~3,000 feed limit). Lead image: `assets/01-journey.png`. |
+| [`linkedin-article.md`](linkedin-article.md) | LinkedIn **Article** (Pulse) | The full long-form version (no char limit) — paste into LinkedIn's Article editor. |
 | [`reddit-post.md`](reddit-post.md) | r/rust · r/programming · r/commandline | Candid, technical, dead-ends-forward. Title + body. |
 | [`substack-article.md`](substack-article.md) | Substack | Long-form essay (~1,800 words). Full narrative arc. |
 | [`devto-article.md`](devto-article.md) | dev.to | Code-heavy tutorial/story hybrid. Has YAML frontmatter. |
 | [`benchmark-data.md`](benchmark-data.md) | — | **Resource:** every number, the build comparison, the full rejected-ideas ledger. The source of truth the four posts draw from. |
+| [`style-guide.md`](style-guide.md) | — | **Resource:** the author's voice (tone, habits, signature phrases) reverse-engineered from his published work, used to write the posts. |
+
+## Images (`assets/`)
+
+Square (1080×1080), dark/terminal-themed — built for the LinkedIn feed (carousel or single image).
+
+| File | Use |
+|---|---|
+| [`assets/01-journey.png`](assets/01-journey.png) | Hero: `73 ms → 0.34 ms`, bash→native, log scale, musl highlighted |
+| [`assets/02-where-time-goes.png`](assets/02-where-time-goes.png) | The hook: `~334 µs spawn (98%)` vs `~6 µs logic (2%)` |
+| [`assets/03-funnel.png`](assets/03-funnel.png) | `169 ideas → 22 → 6 → 1 (musl)` + the rejected dead-ends |
+| [`assets/six-workflow-patterns.png`](assets/six-workflow-patterns.png) | The dynamic-workflow patterns diagram (credit: @trq212) — referenced in the brainstorm section |
+| `assets/_gen.py` | Pillow script that renders charts 01–03 (re-run to tweak) |
+
+**LinkedIn suggestion:** lead with `01-journey.png`, or post 01→02→03 as a carousel (best reach).
 
 ## The story in one paragraph
 
