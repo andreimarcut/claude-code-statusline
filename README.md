@@ -373,6 +373,25 @@ throttled reprint — stdin is read with a bash builtin, not `cat`). At the defa
 `refreshInterval: 60` that's a negligible, periodic blip. (Wall/CPU/RAM need bash 5+;
 peak-RAM and fork-count are Linux-only and degrade gracefully elsewhere.)
 
+## Tests
+
+```bash
+./run-tests.sh              # bash suite + lint + cargo test + parity-check
+./run-tests.sh --bash-only  # skip the Rust steps (no cargo toolchain needed)
+```
+
+What it runs:
+- **`tests/test-statusline.sh`** — drives `statusline-command.sh` over many envelopes (model
+  shortening, bars + percentages, reset/elapsed/cost formatting, missing/malformed-field guards,
+  the Unit-Separator join, the throttle fast-path).
+- **`tests/test-lint.sh`** — `bash -n` (and `shellcheck` if present) on every script.
+- **`cargo test`** (in [`native/`](native/)) — unit tests for the JSON parser and `render`/
+  `render_bar` (incl. malformed-input no-panic), an exact-output battery over the 14 envelopes,
+  and an integration **parity** test that compares the binary to the script.
+- **`./parity-check.sh`** — the canonical script↔binary cross-check across 14 envelopes.
+
+Steps 3–4 are skipped (not failed) when `cargo` is absent, so the bash tests still run anywhere.
+
 ## Field reference
 
 All fields come from the [status line JSON input](https://code.claude.com/docs/en/statusline#available-data).

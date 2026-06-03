@@ -15,6 +15,8 @@ The docs show an example status line — two lines, model and folder and a littl
 
 And I got curious: could I make something similar, but one line and more compact?
 
+[Attach image: docs/assets/screenshot.png — What I built: one compact line — model, folder, context + 5-hour usage bars, weekly quota, elapsed time, and cost.]
+
 Honest aside: all of this was vibe coding. I don't generally encourage that — but for experiments, PoCs, and little learning projects, it is great. This was exactly that.
 
 A friend asked me to send him the config, so I quickly spun up a GitHub repo with Claude Code to share it. Side note, Claude Code's install-by-prompt is lovely — you hand it a prompt plus a repo and it installs everything for you, no copy-paste dance.

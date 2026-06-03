@@ -26,6 +26,10 @@ The thing itself is tiny — a status line for Claude Code: it reads JSON on std
 
 **Bash → native.** The original was a bash script that forked `jq` once per field, 12 times. That alone was ~48 ms of ~73 ms. So I collapsed it to one `jq` call plus bash builtins for everything else (`${var##*/}`, `printf '%(%s)T'`, `printf -v`, `IFS= read -rd ''`) → **~6 ms**, 1 fork. A session-keyed cache reprints in **~1.8 ms** with zero forks.
 
+![the one-line status line](assets/screenshot.png)
+
+*What I built: one compact line — model, folder, context + 5-hour usage bars, weekly quota, elapsed time, and cost.*
+
 Then I rewrote it in **Rust** to chase the floor. Hand-rolled recursive-descent JSON parser, **zero crates**, byte-identical output verified by a parity check over 14 envelopes. Doing the parser by hand instead of reaching for a crate was a great learning experience — I felt like a student again, and that's the best part.
 
 **The wall I hit:** the actual logic (parse + render) is **~6 µs** (5,696 ns over a 1M-iter micro-bench). The rendering you see on screen is rounding error. **~99% of every invocation is the kernel spawning a process.** You can't optimize code that isn't the bottleneck — an empty `fn main(){}` spawns at the same speed. That was humbling.

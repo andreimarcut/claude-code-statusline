@@ -54,6 +54,9 @@ One gotcha that cost me time: `input=$(</dev/stdin)` reads **empty** under Claud
 
 Result: **~6 ms with 1 fork.** And a session-keyed cache that reprints the last line *before* the `jq` parse even runs: **~1.8 ms, 0 forks.** Already pretty good for a `simple` script.
 
+![the one-line status line](assets/screenshot.png)
+*What I built: one compact line — model, folder, context + 5-hour usage bars, weekly quota, elapsed time, and cost.*
+
 ## Rust: meeting the wall
 
 Then I thought, how about a native binary. I rewrote it in **Rust** — a hand-written recursive-descent JSON parser, **zero external crates** (offline build, tiny binary), output byte-identical to the script. A `parity-check.sh` diffs both across 14 envelopes so they can never drift apart. The render function is pure — `render(input, now)` with the clock injected — so it's deterministic and testable. I really appreciate the `compiler` here; once it's green, you mostly trust it. After you understand why it lets you do things, you start to think that's the **correct** way to do them.

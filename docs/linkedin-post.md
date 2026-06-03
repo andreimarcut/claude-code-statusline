@@ -12,6 +12,8 @@ It all started by accident :) I stumbled on the /statusline command in Claude Co
 
 The docs show an example status line, two lines, that looked nice. I got curious: could I make something similar but one line and more compact? Honest aside — all of it was vibe coding. I don't generally encourage that, but for experiments, PoCs, and learning projects, it's great. A friend asked me to send the config, so I spun up a GitHub repo with Claude Code to share it (its install-by-prompt is lovely: a prompt + a repo, and it's all installed). Then another friend in the same group said it was too slow :)) — this when it ran in ~6 ms. So I rewrote it in Rust. When it got to ~1 ms, that friend said: fast, you don't even feel it — but not the fastest. So I said "hold my beer," and went to push it even lower.
 
+[Attach image: docs/assets/screenshot.png — What I built: one compact line — model, folder, context + 5-hour usage bars, weekly quota, elapsed time, and cost.]
+
 That is where it got humbling. The Rust logic runs in ~6 microseconds. The other ~99% of every run is just the OS spawning a process. You cannot out-code that — an empty fn main starts no faster.
 
 So the real wins were all about being a process, not about the code:

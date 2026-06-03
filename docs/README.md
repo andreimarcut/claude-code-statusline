@@ -19,6 +19,7 @@ its platform actually renders (see the table).
 | [`reddit-post.md`](reddit-post.md) | r/rust · r/programming · r/commandline | Candid, technical, dead-ends-forward. Title + body. |
 | [`substack-article.md`](substack-article.md) | Substack | Long-form essay (~1,800 words). Full narrative arc. |
 | [`devto-article.md`](devto-article.md) | dev.to | Code-heavy tutorial/story hybrid. Has YAML frontmatter. |
+| [`medium-article.md`](medium-article.md) | Medium | Long-form essay; tables→prose (Medium doesn't render md tables), code blocks OK. |
 | [`benchmark-data.md`](benchmark-data.md) | — | **Resource:** every number, the build comparison, the full rejected-ideas ledger. The source of truth the four posts draw from. |
 | [`style-guide.md`](style-guide.md) | — | **Resource:** the author's voice (tone, habits, signature phrases) reverse-engineered from his published work, used to write the posts. |
 
@@ -32,6 +33,8 @@ Square (1080×1080), dark/terminal-themed — built for the LinkedIn feed (carou
 | [`assets/02-where-time-goes.png`](assets/02-where-time-goes.png) | The hook: `~334 µs spawn (98%)` vs `~6 µs logic (2%)` |
 | [`assets/03-funnel.png`](assets/03-funnel.png) | `169 ideas → 22 → 6 → 1 (musl)` + the rejected dead-ends |
 | [`assets/six-workflow-patterns.png`](assets/six-workflow-patterns.png) | The dynamic-workflow patterns diagram (credit: @trq212) — referenced in the brainstorm section *Borrowed light-themed external figure, not part of the dark 1080×1080 chart set.* |
+| [`assets/screenshot.png`](assets/screenshot.png) | The built project: the compact **one-line** status line in a real terminal (the result; all articles show it). |
+| [`assets/default-statusline.png`](assets/default-statusline.png) | Claude Code's **two-line** docs example — the one that started it (the before). |
 | `assets/_gen.py` | Pillow script that renders charts 01–03 (re-run to tweak) |
 
 **LinkedIn suggestion:** lead with `01-journey.png`, or post 01→02→03 as a carousel (best reach).

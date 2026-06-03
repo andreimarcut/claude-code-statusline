@@ -25,11 +25,18 @@ fast path; users may run either). Layout:
   each stage with warmup + `black_box`. Run: `cargo run --release --bin bench`.
 - `native/src/bin/floor.rs` — a dev-only empty-`main` bin (same release profile). `bench.sh`
   times it between `/usr/bin/true` and the real binary to show spawn ≫ logic. Never shipped.
+- **Tests**: `native/src/lib.rs` carries `#[cfg(test)]` unit tests (parser + `render`/`render_bar`,
+  malformed-input no-panic); `native/tests/render_battery.rs` asserts exact output for the 14
+  envelopes (fixed `now`); `native/tests/parity.rs` shells out to the script and compares. Bash
+  tests live in `tests/`; **`./run-tests.sh`** runs everything (bash + `cargo test` + parity);
+  zero dev-dependencies (keep it that way). After any logic change, run `./run-tests.sh`.
 
 If you change the **rendering** (fields, order, colors, glyphs, separators, formats),
 change BOTH `statusline-command.sh` and `lib.rs`, then run `./parity-check.sh` (it diffs
 the script with `CLAUDE_STATUSLINE_THROTTLE=0` against the built binary across 14 envelopes;
-`BIN=<path> ./parity-check.sh` checks a specific artifact, e.g. the musl build).
+`BIN=<path> ./parity-check.sh` checks a specific artifact, e.g. the musl build). Re-run the
+**exact-output battery** in `native/tests/render_battery.rs` too — its expected strings will
+need regenerating when output changes.
 Notes:
 - The binary intentionally has **no throttle** (sub-ms render; a cache round-trip would
   only add cost) and **omits the legacy transcript ctx fallback** (pre-2.1.132 only).

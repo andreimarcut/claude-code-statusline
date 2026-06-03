@@ -36,6 +36,12 @@ Then every other subprocess got replaced by a bash builtin. The external basenam
 
 The result: **about 6 ms with one fork** (best run 5.87), with the transient footprint around 6.7 MB. Then I added a small cache, reprint the last line if it's still fresh, keyed on the session ID, and the common case dropped to **about 1.8 ms with zero forks** (best 1.76), around 3.5 MB.
 
+And here's the payoff, the thing I'd set out to make in the first place: one compact line instead of the docs' two.
+
+[Insert image: assets/screenshot.png — What I built: one compact line — model, folder, context + 5-hour usage bars, weekly quota, elapsed time, and cost.]
+
+*The actual status line in my terminal: Opus, high, the project folder, context and 5-hour budgets as little bars, weekly quota, elapsed time, and the session cost, all on one line.*
+
 For any reasonable person, this is where the story ends. The thing runs once a second, six milliseconds is invisible. But I wanted the floor.
 
 ### Stage two: the rewrite, and the wall
