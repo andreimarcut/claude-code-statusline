@@ -157,10 +157,43 @@ assert_contains "wk 10% colored green (92)"  "$(render '{"model":{"display_name"
 assert_contains "wk 55% colored yellow (93)" "$(render '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":55}}}')" $'\033[93m55%'
 assert_contains "wk 90% colored red (91)"    "$(render '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":90}}}')" $'\033[91m90%'
 
+echo "== weekly reset countdown (largest unit + measure) =="
+# `seven_day.resets_at` is absolute; the script subtracts its OWN `now`. Pin the
+# FORMAT (largest applicable unit + its measure), not the exact value, to avoid
+# a few seconds of drift flaking the test. Offsets sit mid-bucket on purpose.
+now_wk="$(printf '%(%s)T' -1)"
+# ≥1 day → days+hours, "↻NdMh".
+assert_match "week reset days+hours format (3.5d -> NdMh)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":10,"resets_at":'"$((now_wk+302400))"'}}}')" $'↻[0-9]+d[0-9]+h'
+now_wk="$(printf '%(%s)T' -1)"
+# <1 day, ≥1h → hours+minutes, "↻NhMm".
+assert_match "week reset hours+minutes format (5.5h -> NhMm)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":10,"resets_at":'"$((now_wk+19800))"'}}}')" $'↻[0-9]+h[0-9]+m'
+now_wk="$(printf '%(%s)T' -1)"
+# <1h, ≥1m → minutes only, "↻Nm".
+assert_match "week reset minutes format (30m -> Nm)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":10,"resets_at":'"$((now_wk+1800))"'}}}')" $'↻[0-9]+m( |$)'
+now_wk="$(printf '%(%s)T' -1)"
+# <1m → seconds, "↻Ns".
+assert_match "week reset seconds format (45s -> Ns)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":10,"resets_at":'"$((now_wk+45))"'}}}')" $'↻[0-9]+s'
+now_wk="$(printf '%(%s)T' -1)"
+assert_not_contains "no week countdown when reset is in the past" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":10,"resets_at":'"$((now_wk-100))"'}}}')" "↻"
+
+echo "== bullet separator before timing/cost group =="
+# A · sets off the timing/cost group from the ctx/quota group when both exist…
+assert_contains "bullet before cost when quota present" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":10}},"cost":{"total_cost_usd":3.50}}')" "· "
+# …but NOT when there is no ctx/quota group to separate from.
+assert_not_contains "no bullet when no middle fields precede cost" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":3.50}}')" "·"
+
 echo "== elapsed-time formatting =="
 assert_eq "duration seconds (5000ms -> 5s)"   "5s"    "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_duration_ms":5000}}'   | grep -oE '[0-9]+[hms].*$' | grep -oE '^[0-9]+s')"
-assert_contains "duration m+s (65000ms -> 1m5s)"   "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_duration_ms":65000}}')"   "1m5s"
+assert_contains "duration minutes alone (65000ms -> 1m)" "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_duration_ms":65000}}')"   "1m"
 assert_contains "duration h+m (7380000ms -> 2h3m)" "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_duration_ms":7380000}}')" "2h3m"
+assert_contains "duration d+h (90000000ms -> 1d1h)" "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_duration_ms":90000000}}')" "1d1h"
 assert_contains "duration exactly 1h (3600000ms -> 1h0m)" "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_duration_ms":3600000}}')" "1h0m"
 assert_contains "duration 59s stays seconds (59000ms -> 59s)" "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_duration_ms":59000}}')" "59s"
 

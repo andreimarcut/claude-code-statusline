@@ -9,7 +9,7 @@
 # - effort.level → color-coded level shown next to the model
 # - context_window.used_percentage → ctx bar (1M-aware via envelope)
 # - rate_limits.five_hour → 5h bar + reset countdown
-# - rate_limits.seven_day → wk (all-models weekly)
+# - rate_limits.seven_day → wk (all-models weekly) + reset countdown
 # - cost.{total_duration_ms, total_cost_usd} → elapsed + $ (last)
 #
 # Right-alignment was attempted via leading whitespace, the CHA cursor
@@ -71,7 +71,7 @@ fi
 IFS=$'\x1f\n' read -r \
   model_full effort_level dir_cur dir_cwd session_id ctx_pct \
   transcript cost_usd duration_ms session_pct week_all_pct session_resets_at \
-  week_sonnet_pct \
+  week_sonnet_pct week_resets_at \
   <<<"$(jq -r '[
     .model.display_name // "",
     .effort.level // "",
@@ -90,7 +90,8 @@ IFS=$'\x1f\n' read -r \
     # ANY key mentioning "sonnet" so this lights up automatically if a
     # future version adds it (under whatever name). Empty until then.
     ((.rate_limits // {}) | to_entries
-        | map(select(.key | test("sonnet"; "i"))) | (.[0].value.used_percentage // ""))
+        | map(select(.key | test("sonnet"; "i"))) | (.[0].value.used_percentage // "")),
+    (.rate_limits.seven_day.resets_at // "")
   ] | map(tostring) | join("")' <<<"$input" 2>/dev/null)"
 
 # ── Model short name ─────────────────────────────────────────────────
@@ -141,14 +142,23 @@ fi
 cost_str=""
 [[ "$cost_usd" =~ ^[0-9]+(\.[0-9]+)?$ ]] && printf -v cost_str '$%.2f' "$cost_usd"
 
-duration_str=""
-if [[ "$duration_ms" =~ ^[0-9]+$ ]]; then
-  secs=$(( duration_ms / 1000 ))
-  if   [ "$secs" -ge 3600 ]; then printf -v duration_str '%dh%dm' "$((secs/3600))" "$(((secs%3600)/60))"
-  elif [ "$secs" -ge 60 ];   then printf -v duration_str '%dm%ds' "$((secs/60))"   "$((secs%60))"
-  else                            printf -v duration_str '%ds' "$secs"
+# Uniform duration formatting, used for every time field (uptime + both
+# reset countdowns): the two largest units down to the hour ("4d3h",
+# "5h12m"), then a single unit below ("30m", "45s"). Non-positive → empty
+# (so a past reset shows no countdown); 0 seconds → "0s".
+# Usage: fmt_dur <outvar> <seconds>
+fmt_dur() {
+  local -n _d="$1"; local s="$2"
+  if   [ "$s" -ge 86400 ]; then printf -v _d '%dd%dh' "$((s/86400))" "$(((s%86400)/3600))"
+  elif [ "$s" -ge 3600 ];  then printf -v _d '%dh%dm' "$((s/3600))"  "$(((s%3600)/60))"
+  elif [ "$s" -ge 60 ];    then _d="$((s/60))m"
+  elif [ "$s" -ge 0 ];     then _d="${s}s"
+  else                          _d=""
   fi
-fi
+}
+
+duration_str=""
+[[ "$duration_ms" =~ ^[0-9]+$ ]] && fmt_dur duration_str "$(( duration_ms / 1000 ))"
 
 # ── Rate-limit quotas (from envelope, not local approximation) ───────
 # Claude Code passes `rate_limits.five_hour.used_percentage` and
@@ -160,16 +170,16 @@ fi
 [[ "$week_all_pct" =~ ^[0-9]+(\.[0-9]+)?$ ]] && week_all_pct=${week_all_pct%.*} || week_all_pct=""
 [[ "$week_sonnet_pct" =~ ^[0-9]+(\.[0-9]+)?$ ]] && week_sonnet_pct=${week_sonnet_pct%.*} || week_sonnet_pct=""
 
-# Time-until-reset for the 5h session window. `resets_at` is a unix
-# timestamp; render the diff compactly: "2h15m", "45m", or "30s".
+# Time-until-reset for the 5h session and 7-day windows. `resets_at` is a
+# unix timestamp; fmt_dur renders the diff uniformly ("4d3h"/"5h12m"/"30m"/
+# "45s") and yields empty for a past reset (so no countdown shows).
 session_reset_in=""
-if [[ "$session_resets_at" =~ ^[0-9]+$ ]]; then
-  diff=$(( session_resets_at - now ))   # `now` computed once, above
-  if   [ "$diff" -ge 3600 ]; then printf -v session_reset_in '%dh%dm' "$((diff/3600))" "$(((diff%3600)/60))"
-  elif [ "$diff" -ge 60 ];   then printf -v session_reset_in '%dm' "$((diff/60))"
-  elif [ "$diff" -gt 0 ];    then session_reset_in="${diff}s"
-  fi
-fi
+[[ "$session_resets_at" =~ ^[0-9]+$ ]] && fmt_dur session_reset_in "$(( session_resets_at - now ))"
+[ "$session_reset_in" = "0s" ] && session_reset_in=""
+
+week_reset_in=""
+[[ "$week_resets_at" =~ ^[0-9]+$ ]] && fmt_dur week_reset_in "$(( week_resets_at - now ))"
+[ "$week_reset_in" = "0s" ] && week_reset_in=""
 
 # ── Colors ───────────────────────────────────────────────────────────
 G=$'\033[92m'   # bright green
@@ -231,6 +241,7 @@ parts+=("${G}[${model_short}]${R}${effort_str}")
 # Each of these is a distinct field, separated by the uniform separator
 # below (the reset countdown stays glued to 5h as part of that field).
 # Cost goes last.
+_group_base=${#parts[@]}   # mark: any ctx/quota segment lands past here
 if [ -n "$ctx_pct" ]; then render_bar _ctxbar "$ctx_pct"; parts+=("${W}ctx${R} $_ctxbar"); fi
 if [ -n "$session_pct" ]; then
   render_bar _5hbar "$session_pct"
@@ -239,8 +250,16 @@ if [ -n "$session_pct" ]; then
   parts+=("$five_seg")
 fi
 # Weekly quotas: all-models (wk) and Sonnet-only (son, when available).
-if [ -n "$week_all_pct" ];    then pct_color _wkc "$week_all_pct";  parts+=("${W}wk${R} ${_wkc}${week_all_pct}%${R}"); fi
+if [ -n "$week_all_pct" ]; then
+  pct_color _wkc "$week_all_pct"
+  wk_seg="${W}wk${R} ${_wkc}${week_all_pct}%${R}"
+  [ -n "$week_reset_in" ] && wk_seg="${wk_seg} ${D}↻${R}${W}${week_reset_in}${R}"
+  parts+=("$wk_seg")
+fi
 if [ -n "$week_sonnet_pct" ]; then pct_color _snc "$week_sonnet_pct"; parts+=("${W}son${R} ${_snc}${week_sonnet_pct}%${R}"); fi
+# Set off the timing/cost group from the ctx/quota group with a bullet
+# separator — but only when there's a ctx/quota group to separate from.
+{ [ "${#parts[@]}" -gt "$_group_base" ] && { [ -n "$duration_str" ] || [ -n "$cost_str" ]; }; } && parts+=("$SEP")
 [ -n "$duration_str" ] && parts+=("${C}${duration_str}${R}")
 [ -n "$cost_str" ] && parts+=("${Y}${cost_str}${R}")   # cost last
 

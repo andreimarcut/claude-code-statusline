@@ -386,9 +386,9 @@ What it runs:
   the Unit-Separator join, the throttle fast-path).
 - **`tests/test-lint.sh`** — `bash -n` (and `shellcheck` if present) on every script.
 - **`cargo test`** (in [`native/`](native/)) — unit tests for the JSON parser and `render`/
-  `render_bar` (incl. malformed-input no-panic), an exact-output battery over the 14 envelopes,
+  `render_bar` (incl. malformed-input no-panic), an exact-output battery over the 15 envelopes,
   and an integration **parity** test that compares the binary to the script.
-- **`./parity-check.sh`** — the canonical script↔binary cross-check across 14 envelopes.
+- **`./parity-check.sh`** — the canonical script↔binary cross-check across 15 envelopes.
 
 Steps 3–4 are skipped (not failed) when `cargo` is absent, so the bash tests still run anywhere.
 

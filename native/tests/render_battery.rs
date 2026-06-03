@@ -1,4 +1,4 @@
-// Exact-output battery: assert the precise rendered string for the same 14
+// Exact-output battery: assert the precise rendered string for the same 15
 // envelopes that parity-check.sh diffs against the bash script. `now` is fixed
 // (1_700_000_000) and every `resets_at` is built relative to it, so the
 // countdown text is deterministic. Cases that omit a folder field fall back to
@@ -28,8 +28,19 @@ fn battery_exact_outputs() {
             r#"{{"model":{{"display_name":"Claude Opus 4.8"}},"workspace":{{"current_dir":"/home/me/proj"}},"context_window":{{"used_percentage":42}},"cost":{{"total_cost_usd":11.55,"total_duration_ms":4560000}},"rate_limits":{{"five_hour":{{"used_percentage":85,"resets_at":{}}},"seven_day":{{"used_percentage":10}}}},"effort":{{"level":"high"}}}}"#,
             NOW + 5400
         )),
-        "\x1b[92m[Opus]\x1b[0m \x1b[91mhigh\x1b[0m \x1b[90m[\x1b[0m\x1b[97mproj\x1b[0m\x1b[90m]\x1b[0m \x1b[97mctx\x1b[0m \x1b[38;5;190m██\x1b[32m░░░\x1b[0m \x1b[97m42%\x1b[0m \x1b[97m5h\x1b[0m \x1b[38;5;208m████\x1b[32m░\x1b[0m \x1b[97m85%\x1b[0m \x1b[90m↻\x1b[0m\x1b[97m1h30m\x1b[0m \x1b[97mwk\x1b[0m \x1b[92m10%\x1b[0m \x1b[96m1h16m\x1b[0m \x1b[93m$11.55\x1b[0m",
+        "\x1b[92m[Opus]\x1b[0m \x1b[91mhigh\x1b[0m \x1b[90m[\x1b[0m\x1b[97mproj\x1b[0m\x1b[90m]\x1b[0m \x1b[97mctx\x1b[0m \x1b[38;5;190m██\x1b[32m░░░\x1b[0m \x1b[97m42%\x1b[0m \x1b[97m5h\x1b[0m \x1b[38;5;208m████\x1b[32m░\x1b[0m \x1b[97m85%\x1b[0m \x1b[90m↻\x1b[0m\x1b[97m1h30m\x1b[0m \x1b[97mwk\x1b[0m \x1b[92m10%\x1b[0m \x1b[90m·\x1b[0m \x1b[96m1h16m\x1b[0m \x1b[93m$11.55\x1b[0m",
         "full"
+    );
+
+    // ---- week-reset (days+hours) ----------------------------------------
+    // 300000s = 3d (259200) + 40800s → 11h → "3d11h".
+    assert_eq!(
+        r(&format!(
+            r#"{{"model":{{"display_name":"Opus"}},"rate_limits":{{"seven_day":{{"used_percentage":10,"resets_at":{}}}}}}}"#,
+            NOW + 300000
+        )),
+        "\x1b[92m[Opus]\x1b[0m \x1b[90m[\x1b[0m\x1b[97mmyproj\x1b[0m\x1b[90m]\x1b[0m \x1b[97mwk\x1b[0m \x1b[92m10%\x1b[0m \x1b[90m↻\x1b[0m\x1b[97m3d11h\x1b[0m",
+        "week-reset"
     );
 
     // ---- minimal --------------------------------------------------------
@@ -80,7 +91,7 @@ fn battery_exact_outputs() {
     // ---- pct-float ------------------------------------------------------
     assert_eq!(
         r(r#"{"model":{"display_name":"Opus"},"context_window":{"used_percentage":42.9},"cost":{"total_cost_usd":0.08,"total_duration_ms":7000}}"#),
-        "\x1b[92m[Opus]\x1b[0m \x1b[90m[\x1b[0m\x1b[97mmyproj\x1b[0m\x1b[90m]\x1b[0m \x1b[97mctx\x1b[0m \x1b[38;5;190m██\x1b[32m░░░\x1b[0m \x1b[97m42%\x1b[0m \x1b[96m7s\x1b[0m \x1b[93m$0.08\x1b[0m",
+        "\x1b[92m[Opus]\x1b[0m \x1b[90m[\x1b[0m\x1b[97mmyproj\x1b[0m\x1b[90m]\x1b[0m \x1b[97mctx\x1b[0m \x1b[38;5;190m██\x1b[32m░░░\x1b[0m \x1b[97m42%\x1b[0m \x1b[90m·\x1b[0m \x1b[96m7s\x1b[0m \x1b[93m$0.08\x1b[0m",
         "pct-float"
     );
 

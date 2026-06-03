@@ -48,6 +48,7 @@ check() { # <label> <json>
 }
 
 check "full"        '{"model":{"display_name":"Claude Opus 4.8"},"workspace":{"current_dir":"/home/me/proj"},"context_window":{"used_percentage":42},"cost":{"total_cost_usd":11.55,"total_duration_ms":4560000},"rate_limits":{"five_hour":{"used_percentage":85,"resets_at":'"$((now+5400))"'},"seven_day":{"used_percentage":10}},"effort":{"level":"high"}}'
+check "week-reset"  '{"model":{"display_name":"Opus"},"rate_limits":{"seven_day":{"used_percentage":10,"resets_at":'"$((now+300000))"'}}}'
 check "minimal"     '{"model":{"display_name":"Sonnet"},"context_window":{"used_percentage":3}}'
 check "empty"       '{}'
 check "no-effort"   '{"model":{"display_name":"Claude Haiku 4.5"},"workspace":{"current_dir":"/a/b/c"},"context_window":{"used_percentage":50}}'

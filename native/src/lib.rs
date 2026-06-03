@@ -247,6 +247,23 @@ fn int_at(root: &J, ks: &[&str]) -> Option<i64> {
     root.path(ks).and_then(|v| v.as_f64()).map(|f| f as i64)
 }
 
+/// Uniform duration formatting, used for every time field (uptime + both
+/// reset countdowns): the two largest units down to the hour ("4d3h",
+/// "5h12m"), then a single unit below ("30m", "45s"). Non-positive → empty.
+fn fmt_dur(s: i64) -> String {
+    if s >= 86400 {
+        format!("{}d{}h", s / 86400, (s % 86400) / 3600)
+    } else if s >= 3600 {
+        format!("{}h{}m", s / 3600, (s % 3600) / 60)
+    } else if s >= 60 {
+        format!("{}m", s / 60)
+    } else if s >= 0 {
+        format!("{}s", s)
+    } else {
+        String::new()
+    }
+}
+
 fn pct_color(n: i64) -> &'static str {
     if n >= 80 {
         RED
@@ -323,6 +340,10 @@ pub fn render_parsed(root: &J, now: i64) -> String {
         parts.push(format!("{D}[{R}{W}{project}{R}{D}]{R}"));
     }
 
+    // Mark: any ctx/quota segment lands past here. Used to decide whether the
+    // trailing timing/cost group needs a bullet separator before it.
+    let group_base = parts.len();
+
     // Context bar.
     if let Some(ctx) = int_at(root, &["context_window", "used_percentage"]) {
         parts.push(format!("{W}ctx{R} {}", render_bar(ctx, BAR_W)));
@@ -333,15 +354,7 @@ pub fn render_parsed(root: &J, now: i64) -> String {
         let mut seg = format!("{W}5h{R} {}", render_bar(p5, BAR_W));
         if let Some(reset) = int_at(root, &["rate_limits", "five_hour", "resets_at"]) {
             let diff = reset - now;
-            let r = if diff >= 3600 {
-                format!("{}h{}m", diff / 3600, (diff % 3600) / 60)
-            } else if diff >= 60 {
-                format!("{}m", diff / 60)
-            } else if diff > 0 {
-                format!("{}s", diff)
-            } else {
-                String::new()
-            };
+            let r = if diff > 0 { fmt_dur(diff) } else { String::new() };
             if !r.is_empty() {
                 seg.push_str(&format!(" {D}↻{R}{W}{r}{R}"));
             }
@@ -351,7 +364,16 @@ pub fn render_parsed(root: &J, now: i64) -> String {
 
     // Weekly: all-models (wk) and Sonnet-only (son, when a future envelope has it).
     if let Some(wk) = int_at(root, &["rate_limits", "seven_day", "used_percentage"]) {
-        parts.push(format!("{W}wk{R} {}{wk}%{R}", pct_color(wk)));
+        let mut seg = format!("{W}wk{R} {}{wk}%{R}", pct_color(wk));
+        // Reset countdown — same uniform format as everywhere else.
+        if let Some(reset) = int_at(root, &["rate_limits", "seven_day", "resets_at"]) {
+            let diff = reset - now;
+            let r = if diff > 0 { fmt_dur(diff) } else { String::new() };
+            if !r.is_empty() {
+                seg.push_str(&format!(" {D}↻{R}{W}{r}{R}"));
+            }
+        }
+        parts.push(seg);
     }
     if let Some(J::Obj(m)) = root.get("rate_limits") {
         for (k, v) in m {
@@ -365,21 +387,19 @@ pub fn render_parsed(root: &J, now: i64) -> String {
         }
     }
 
-    // Duration (elapsed).
-    if let Some(ms) = int_at(root, &["cost", "total_duration_ms"]) {
-        let secs = ms / 1000;
-        let dur = if secs >= 3600 {
-            format!("{}h{}m", secs / 3600, (secs % 3600) / 60)
-        } else if secs >= 60 {
-            format!("{}m{}s", secs / 60, secs % 60)
-        } else {
-            format!("{}s", secs)
-        };
+    // Duration (elapsed) and cost form the trailing timing/cost group; set
+    // it off from the quotas with a bullet separator.
+    let dur = int_at(root, &["cost", "total_duration_ms"]).map(|ms| fmt_dur(ms / 1000));
+    let cost = root
+        .path(&["cost", "total_cost_usd"])
+        .and_then(|v| v.as_f64());
+    if parts.len() > group_base && (dur.is_some() || cost.is_some()) {
+        parts.push(format!("{D}·{R}"));
+    }
+    if let Some(dur) = dur {
         parts.push(format!("{C}{dur}{R}"));
     }
-
-    // Cost (last column).
-    if let Some(cost) = root.path(&["cost", "total_cost_usd"]).and_then(|v| v.as_f64()) {
+    if let Some(cost) = cost {
         parts.push(format!("{Y}${cost:.2}{R}"));
     }
 
@@ -851,10 +871,12 @@ mod tests {
         };
         // 7s
         assert!(render(mk(7000).as_bytes(), 0).contains(&format!("{C}7s{R}")));
-        // 2m3s (123s)
-        assert!(render(mk(123000).as_bytes(), 0).contains(&format!("{C}2m3s{R}")));
+        // 2m (123s → minutes alone, uniform format)
+        assert!(render(mk(123000).as_bytes(), 0).contains(&format!("{C}2m{R}")));
         // 2h3m (7380s)
         assert!(render(mk(7380000).as_bytes(), 0).contains(&format!("{C}2h3m{R}")));
+        // 1d1h (90000s → days+hours)
+        assert!(render(mk(90000000).as_bytes(), 0).contains(&format!("{C}1d1h{R}")));
         // 0s
         assert!(render(mk(500).as_bytes(), 0).contains(&format!("{C}0s{R}")));
     }
