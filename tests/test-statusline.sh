@@ -73,12 +73,19 @@ assert_true() {
 # Strip SGR color escapes so assertions read like the visible status line.
 strip_sgr() { sed $'s/\033\\[[0-9;]*m//g'; }
 
-# Render an envelope with the FULL render path (throttle disabled).
+# Render an envelope with the FULL render path (throttle disabled). The fields
+# template is cleared so these exercise the default hardcoded path regardless of
+# any inherited CLAUDE_STATUSLINE_FIELDS.
 # Usage: render '<json>'  -> stdout = raw rendered line (with escapes)
-render() { printf '%s' "$1" | CLAUDE_STATUSLINE_THROTTLE=0 bash "$SCRIPT"; }
+render() { printf '%s' "$1" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS= bash "$SCRIPT"; }
 
 # Same, but with color escapes stripped (visible text only).
 render_plain() { render "$1" | strip_sgr; }
+
+# Render an envelope through a custom CLAUDE_STATUSLINE_FIELDS template.
+# Usage: render_tpl '<template>' '<json>'
+render_tpl() { printf '%s' "$2" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="$1" bash "$SCRIPT"; }
+render_tpl_plain() { render_tpl "$1" "$2" | strip_sgr; }
 
 NOW="$(printf '%(%s)T' -1)"
 
@@ -202,16 +209,20 @@ assert_contains "cost \$11.55"        "$(render_plain '{"model":{"display_name":
 assert_contains "cost pads to 2 dp"   "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":2}}')"     '$2.00'
 assert_contains "cost small value"    "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":0.08}}')"  '$0.08'
 assert_contains "cost colored yellow (93)" "$(render '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":11.55}}')" $'\033[93m$11.55'
-# Rounding: the script feeds jq's string straight to printf '%.2f', so it follows
-# C printf rounding of the IEEE-754 value (round-half-to-even, modulo float
-# representation). These are the values the script ACTUALLY produces — pin them
-# so a rounding-mode regression (e.g. switching to integer-cents) is caught.
-assert_contains "rounding 2.675 -> \$2.67 (round-half-even)" \
-  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":2.675}}')" '$2.67'
-assert_contains "rounding 1.005 -> \$1.00 (float repr below .005)" \
-  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":1.005}}')" '$1.00'
-assert_contains "rounding 0.125 -> \$0.12 (round-half-even)" \
-  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":0.125}}')" '$0.12'
+# Rounding: cost goes through `_round2` — integer-cents, round-HALF-UP on the
+# decimal text (NOT printf %.2f). This is deterministic and byte-identical to the
+# native binary (printf %.2f and Rust {:.2} disagreed on half-cent values like
+# 11.555/0.005; round2 does not). Pin the half-up values incl. carry.
+assert_contains "rounding 2.675 -> \$2.68 (half-up)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":2.675}}')" '$2.68'
+assert_contains "rounding 1.005 -> \$1.01 (half-up)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":1.005}}')" '$1.01'
+assert_contains "rounding 0.125 -> \$0.13 (half-up)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":0.125}}')" '$0.13'
+assert_contains "rounding 11.555 -> \$11.56 (half-up; was the bash↔Rust divergence)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":11.555}}')" '$11.56'
+assert_contains "rounding 9.995 -> \$10.00 (carry)" \
+  "$(render_plain '{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":9.995}}')" '$10.00'
 
 echo "== missing / empty fields yield no broken segments =="
 empty_out="$(render_plain '{}')"
@@ -268,6 +279,81 @@ out_fresh="$(printf '%s' "$env_b" | TMPDIR="$THROTTLE_TMP" CLAUDE_STATUSLINE_THR
 assert_ne "throttle=0 bypasses cache (full render)" "$out_a" "$out_fresh"
 rm -rf "$THROTTLE_TMP"
 
+echo "== template engine (CLAUDE_STATUSLINE_FIELDS) =="
+tpl_env='{"model":{"display_name":"Claude Opus 4.8"},"effort":{"level":"high"},"context_window":{"used_percentage":42},"cost":{"total_cost_usd":1.5,"total_duration_ms":65000}}'
+# Plain field + format.
+assert_eq "tpl short model + usd" "Opus \$1.50" "$(render_tpl_plain '{json.model.display_name:short} {json.cost.total_cost_usd:usd}' "$tpl_env")"
+# Named + bright color tokens emit the right SGR.
+assert_eq "tpl color token" $'\033[31mhigh\033[0m' "$(render_tpl '{red}{json.effort.level}{reset}' "$tpl_env")"
+assert_eq "tpl 256-color token" $'\033[38;5;208mx\033[0m' "$(render_tpl '{fg256:208}x{reset}' "$tpl_env")"
+# Smart separator: shown only when flanked by content on both sides.
+assert_eq "tpl sep shown when flanked" "a · b" "$(render_tpl_plain 'a {sep} b' '{}')"
+assert_eq "tpl sep dropped when right empty" "a" "$(render_tpl_plain 'a {sep} {json.no.field}' '{}')"
+assert_eq "tpl sep dropped when left empty" "b" "$(render_tpl_plain '{json.no.field} {sep} b' '{}')"
+assert_eq "tpl sep:space dropped when left empty" "b" "$(render_tpl_plain '{json.no.field}{sep:space}b' '{}')"
+# Auto-collapse: empty field doesn't leave a double space.
+assert_eq "tpl auto-collapse empty field" "a b" "$(render_tpl_plain 'a {json.no.field} b' '{}')"
+# Conditional group: hidden when field absent, shown when present.
+assert_eq "tpl group hidden" "x y" "$(render_tpl_plain 'x{?json.no.field} z{/} y' '{}')"
+assert_eq "tpl group shown" "x z y" "$(render_tpl_plain 'x{?json.context_window.used_percentage} z{/} y' "$tpl_env")"
+# Arbitrary path access to a non-default field.
+assert_eq "tpl raw field access" "+156/-23" "$(render_tpl_plain '+{json.cost.total_lines_added}/-{json.cost.total_lines_removed}' '{"cost":{"total_lines_added":156,"total_lines_removed":23}}')"
+# :basename is pure (no workspace fallback); :folder carries value→cwd→$PWD.
+assert_eq "tpl basename pure (empty in)" "" "$(render_tpl_plain '{json.no.path:basename}' '{}')"
+assert_eq "tpl basename last component" "proj" "$(render_tpl_plain '{json.workspace.current_dir:basename}' '{"workspace":{"current_dir":"/a/b/proj"}}')"
+assert_eq "tpl folder falls back to cwd" "zed" "$(render_tpl_plain '{json.workspace.current_dir:folder}' '{"cwd":"/x/y/zed"}')"
+# Multi-line: literal \n becomes a second row.
+assert_eq "tpl multi-line" $'Opus\nhigh' "$(render_tpl_plain '{json.model.display_name:short}\n{json.effort.level}' "$tpl_env")"
+# Escapes: \e and \033 both yield ESC.
+assert_eq "tpl \\e escape" $'\033[1mX\033[0m' "$(render_tpl '\e[1mX\e[0m' '{}')"
+assert_eq "tpl \\033 escape" $'\033[1mX\033[0m' "$(render_tpl '\033[1mX\033[0m' '{}')"
+# \xHH and \NNN name a Unicode codepoint emitted as UTF-8 (matches Rust); a lone
+# surrogate from \uHHHH is dropped (char::from_u32 → None).
+assert_eq "tpl \\xHH escape" $'\xc3\x83' "$(render_tpl '\xC3' '{}')"
+assert_eq "tpl \\NNN octal escape" $'\xc3\x83' "$(render_tpl '\303' '{}')"
+assert_eq "tpl \\uHHHH unicode escape" $'\xe2\x99\xa5' "$(render_tpl '♥' '{}')"
+assert_eq "tpl lone surrogate dropped" "[]" "$(render_tpl_plain '[\uD83D]' '{}')"
+# pct-plain (no color) and sep glyph variants.
+assert_eq "tpl pct-plain" "42%" "$(render_tpl_plain '{json.context_window.used_percentage:pct-plain}' "$tpl_env")"
+# pct (colored): green below 50, red at/above 80.
+assert_eq "tpl pct colored green" $'\033[92m42%\033[0m' "$(render_tpl '{json.context_window.used_percentage:pct}' "$tpl_env")"
+assert_eq "tpl pct colored red" $'\033[91m90%\033[0m' "$(render_tpl '{json.context_window.used_percentage:pct}' '{"context_window":{"used_percentage":90}}')"
+assert_eq "tpl sep:dot" "a • b" "$(render_tpl_plain 'a {sep:dot} b' '{}')"
+assert_eq "tpl sep:slash" "a / b" "$(render_tpl_plain 'a {sep:slash} b' '{}')"
+assert_eq "tpl sep:space" "a b" "$(render_tpl_plain 'a{sep:space}b' '{}')"
+# Background color variants.
+assert_eq "tpl bg256" $'\033[48;5;200mo\033[0m' "$(render_tpl '{bg256:200}o{reset}' '{}')"
+assert_eq "tpl bgrgb" $'\033[48;2;10;20;30mo\033[0m' "$(render_tpl '{bgrgb:10,20,30}o{reset}' '{}')"
+assert_eq "tpl bg#hex" $'\033[48;2;255;0;128mo\033[0m' "$(render_tpl '{bg#ff0080}o{reset}' '{}')"
+# A boolean false renders (jq // would drop it); group around it is present.
+assert_eq "tpl boolean false" "ABfalseCD" "$(render_tpl_plain 'A{?json.x.y}B{json.x.y}C{/}D' '{"x":{"y":false}}')"
+# {?path} without the json. prefix resolves against the root, like Rust.
+assert_eq "tpl bare cond" "FOUND" "$(render_tpl_plain '{?foo}FOUND{/}' '{"foo":"bar"}')"
+# A jq-injection attempt via a {json.PATH} token leaks nothing (path is data).
+assert_eq "tpl no jq injection" "LEAK=" "$(HOME=secret render_tpl_plain 'LEAK={json.nope // $ENV.HOME) | (.}' '{}')"
+# :countdown via the template engine (its own regex+delta branch, distinct from
+# the hardcoded path): a future reset shows the ↻ glyph; reset==now is suppressed.
+cd_now="$(printf '%(%s)T' -1)"
+assert_contains "tpl countdown non-zero" "$(render_tpl '{json.r.resets_at:countdown}' '{"r":{"resets_at":'"$((cd_now+5400))"'}}')" $'↻'
+assert_eq "tpl countdown at-now suppressed" "[]" "$(render_tpl_plain '[{json.r.resets_at:countdown}]' '{"r":{"resets_at":'"$cd_now"'}}')"
+# Malformed templates must not error under set -u (exit 0, output is best-effort).
+assert_true "tpl unterminated brace no error" bash -c 'printf "%s" "{}" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="{json.model" bash "'"$SCRIPT"'"'
+assert_true "tpl unknown color no error" bash -c 'printf "%s" "{}" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="{octarine}x{reset}" bash "'"$SCRIPT"'"'
+# The default template (with a trailing space to dodge the short-circuit) renders
+# through the engine identically to the hardcoded path.
+_dflt="$(sed -n "s/^DEFAULT_TEMPLATE='\(.*\)'\$/\1/p" "$SCRIPT")"
+assert_eq "tpl default==hardcoded" "$(render "$tpl_env")" "$(render_tpl "$_dflt " "$tpl_env")"
+
+echo "== throttle reprints multi-line templates intact =="
+ml_tmp="$(mktemp -d)"; ml_sid="ml-sid"
+ml_env='{"session_id":"'"$ml_sid"'","model":{"display_name":"Opus"},"effort":{"level":"high"}}'
+ml_tpl='{json.model.display_name:short}\n{json.effort.level}'
+ml_a="$(printf '%s' "$ml_env" | TMPDIR="$ml_tmp" CLAUDE_STATUSLINE_THROTTLE=3600 CLAUDE_STATUSLINE_FIELDS="$ml_tpl" bash "$SCRIPT")"
+ml_b="$(printf '%s' '{"session_id":"'"$ml_sid"'","model":{"display_name":"Haiku"}}' | TMPDIR="$ml_tmp" CLAUDE_STATUSLINE_THROTTLE=3600 CLAUDE_STATUSLINE_FIELDS="$ml_tpl" bash "$SCRIPT")"
+assert_eq "throttle reprint keeps both rows" $'Opus\nhigh' "$ml_b"
+assert_eq "cached multi-line equals first render" "$ml_a" "$ml_b"
+rm -rf "$ml_tmp"
+
 echo "== bench.sh smoke test =="
 if [ -r "$BENCH" ]; then
   bench_out="$(bash "$BENCH" 5 "$SCRIPT" 2>&1)"; bench_code=$?
@@ -282,22 +368,30 @@ echo "== install.sh jq merge sanity (isolated; never touches ~/.claude) =="
 if [ -r "$INSTALL" ]; then
   merge_tmp="$(mktemp -d)"
   settings="$merge_tmp/settings.json"
-  # Pre-existing settings with unrelated keys AND an old statusLine block.
-  printf '%s' '{"theme":"dark","permissions":{"allow":["x"]},"statusLine":{"type":"command","command":"OLD","refreshInterval":5}}' > "$settings"
-  # Reproduce install.sh's exact merge (the block-build + jq assignment).
+  # Pre-existing settings with unrelated keys, an old statusLine block, AND an
+  # existing env var that must survive the env merge.
+  printf '%s' '{"theme":"dark","permissions":{"allow":["x"]},"env":{"KEEP_ME":"yes"},"statusLine":{"type":"command","command":"OLD","refreshInterval":5}}' > "$settings"
+  # Reproduce install.sh's exact merge (statusLine block + env-block merge).
   blk=$(jq -n --arg cmd "bash ~/.claude/statusline-command.sh" --argjson ri 60 \
     '{type:"command", command:$cmd, refreshInterval:$ri}')
   tmpf=$(mktemp)
-  jq --argjson sl "$blk" '.statusLine = $sl' "$settings" > "$tmpf" && mv "$tmpf" "$settings"
+  jq --argjson sl "$blk" --arg tpl "DEFTPL" --arg thr "2" --arg ctx "1000000" \
+     '.statusLine = $sl
+      | .env = ((.env // {}) + {CLAUDE_STATUSLINE_FIELDS:$tpl, CLAUDE_STATUSLINE_THROTTLE:$thr, CLAUDE_STATUSLINE_CTX_MAX:$ctx})' \
+     "$settings" > "$tmpf" && mv "$tmpf" "$settings"
   assert_eq "merge preserves unrelated key (theme)" "dark" "$(jq -r '.theme' "$settings")"
   assert_eq "merge preserves nested key (permissions.allow[0])" "x" "$(jq -r '.permissions.allow[0]' "$settings")"
   assert_eq "merge updates statusLine.command" "bash ~/.claude/statusline-command.sh" "$(jq -r '.statusLine.command' "$settings")"
   assert_eq "merge sets refreshInterval" "60" "$(jq -r '.statusLine.refreshInterval' "$settings")"
+  assert_eq "env merge preserves existing env var" "yes" "$(jq -r '.env.KEEP_ME' "$settings")"
+  assert_eq "env merge writes the template" "DEFTPL" "$(jq -r '.env.CLAUDE_STATUSLINE_FIELDS' "$settings")"
+  assert_eq "env merge writes throttle default" "2" "$(jq -r '.env.CLAUDE_STATUSLINE_THROTTLE' "$settings")"
   assert_true "merged settings is valid JSON" jq -e . "$settings"
   # Creating-from-scratch path (no existing settings.json).
   fresh="$merge_tmp/fresh.json"
-  jq -n --argjson sl "$blk" '{statusLine: $sl}' > "$fresh"
-  assert_eq "fresh settings has only statusLine key" "statusLine" "$(jq -r 'keys[]' "$fresh")"
+  jq -n --argjson sl "$blk" --arg tpl "DEFTPL" --arg thr "2" --arg ctx "1000000" \
+     '{statusLine: $sl, env: {CLAUDE_STATUSLINE_FIELDS:$tpl, CLAUDE_STATUSLINE_THROTTLE:$thr, CLAUDE_STATUSLINE_CTX_MAX:$ctx}}' > "$fresh"
+  assert_eq "fresh settings keys are statusLine+env" "env statusLine" "$(jq -r 'keys|join(" ")' "$fresh")"
   rm -rf "$merge_tmp"
 else
   _bad "install.sh present"; printf '         %s not found\n' "$INSTALL"

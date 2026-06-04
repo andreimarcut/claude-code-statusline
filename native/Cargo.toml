@@ -3,10 +3,15 @@ name = "claude-statusline"
 version = "0.1.0"
 edition = "2021"
 description = "Native fast path for the Claude Code status line"
+license = "MIT OR BSD-3-Clause"
 
 [[bin]]
 name = "claude-statusline"
 path = "src/main.rs"
+# `#![no_main]` means there's no test harness to run; without this, `cargo test`
+# builds an "unittests src/main.rs" target and executes the real C `main`, which
+# blocks on stdin forever. No tests live here (logic is tested via lib.rs).
+test = false
 
 # Optimize for a tiny, fast-starting binary (no deps, so this builds offline).
 [profile.release]

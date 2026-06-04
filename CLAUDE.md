@@ -27,16 +27,21 @@ fast path; users may run either). Layout:
   times it between `/usr/bin/true` and the real binary to show spawn ≫ logic. Never shipped.
 - **Tests**: `native/src/lib.rs` carries `#[cfg(test)]` unit tests (parser + `render`/`render_bar`,
   malformed-input no-panic); `native/tests/render_battery.rs` asserts exact output for the 15
-  envelopes (fixed `now`); `native/tests/parity.rs` shells out to the script and compares. Bash
-  tests live in `tests/`; **`./run-tests.sh`** runs everything (bash + `cargo test` + parity);
-  zero dev-dependencies (keep it that way). After any logic change, run `./run-tests.sh`.
+  envelopes (fixed `now`); `native/tests/template_battery.rs` asserts the template engine
+  reproduces the hardcoded path for every envelope (default==hardcoded) plus exact output for
+  custom templates, color tokens, smart separators, groups, multi-line, and malformed input;
+  `native/tests/parity.rs` shells out to the script and compares. Bash tests live in `tests/`;
+  **`./run-tests.sh`** runs everything (bash + `cargo test` + parity); zero dev-dependencies
+  (keep it that way). After any logic change, run `./run-tests.sh`.
 
-If you change the **rendering** (fields, order, colors, glyphs, separators, formats),
-change BOTH `statusline-command.sh` and `lib.rs`, then run `./parity-check.sh` (it diffs
-the script with `CLAUDE_STATUSLINE_THROTTLE=0` against the built binary across 15 envelopes;
-`BIN=<path> ./parity-check.sh` checks a specific artifact, e.g. the musl build). Re-run the
-**exact-output battery** in `native/tests/render_battery.rs` too — its expected strings will
-need regenerating when output changes.
+If you change the **rendering** (fields, order, colors, glyphs, separators, formats) — in the
+hardcoded path, the template engine, a format, or `DEFAULT_TEMPLATE` — change BOTH
+`statusline-command.sh` and `lib.rs`, then run `./parity-check.sh` (it diffs the script with
+`CLAUDE_STATUSLINE_THROTTLE=0` against the built binary across 15 default envelopes **and 12
+custom-template cases**; `BIN=<path> ./parity-check.sh` checks a specific artifact, e.g. the
+musl build). Re-run the **exact-output batteries** in `native/tests/render_battery.rs` and
+`native/tests/template_battery.rs` too — their expected strings will need regenerating when
+output changes.
 Notes:
 - The binary intentionally has **no throttle** (sub-ms render; a cache round-trip would
   only add cost) and **omits the legacy transcript ctx fallback** (pre-2.1.132 only).
@@ -95,7 +100,8 @@ A multi-agent brainstorm vetted ~22 candidate optimizations against the ~0.4 ms 
 
 **First, offer the choice (use AskUserQuestion): bash script vs native binary.**
 - **Script** (default, recommend this): needs `jq` + bash 4.2+, no build, portable,
-  trivially auditable. ~6 ms / ~1.8 ms throttled, ~6 MB.
+  trivially auditable. ~7 ms default layout (~11 ms with a custom `CLAUDE_STATUSLINE_FIELDS`
+  template — interpreted engine, bash-only) / ~2 ms throttled, ~7 MB.
 - **Native**: ~0.4 ms warm spawn, ~0.4 MB (musl) / ~1 MB (glibc), zero forks — but needs
   `cargo` and a one-time build, and is platform-specific. `install.sh --native` prefers the
   musl target when installed. Pick only if the user wants the minimal footprint and has `cargo`.
@@ -132,7 +138,34 @@ run `./bench.sh` and report wall time / CPU / peak RAM / forks before and after.
    **If you add or remove a field, update BOTH the `jq` array AND the `read` variable list,
    keeping them in the same order.**
 3. The rest formats segments and joins them. Each rendered field is pushed to the `parts`
-   array; the final loop joins `parts` with a single space.
+   array; the final loop joins `parts` with a single space. **This is the hardcoded
+   "default" path.**
+
+## Configurable layout: the template engine
+
+The layout is user-configurable via the `CLAUDE_STATUSLINE_FIELDS` env var (a template
+string), delivered through the settings.json **`env` block** (`install.sh` writes the
+default there). User docs: `TEMPLATES.md`. How it's wired:
+
+- **Dispatch** (right after the throttle, before the hardcoded jq): if the env var is
+  unset/empty **or equals `DEFAULT_TEMPLATE`**, run the hardcoded path (zero engine cost —
+  this is the common case, so the default never pays for the engine). Otherwise
+  `_render_template` runs and the script exits.
+- **`DEFAULT_TEMPLATE`** is the hardcoded layout expressed as a template; fed through the
+  engine it reproduces the hardcoded output **byte-for-byte** (asserted by tests). It is
+  defined in BOTH `statusline-command.sh` and `lib.rs` and **must stay identical** in both.
+- **The engine mirrors `native/src/lib.rs` exactly** (tokenizer → format dispatch →
+  smart-separator/auto-collapse emit). Any change to engine behavior, a format, a color
+  token, the default template, or the boundary/group/sep semantics MUST be made in BOTH
+  front-ends, then verified with `./parity-check.sh` (it cross-checks custom templates too)
+  and `cargo test` (`native/tests/template_battery.rs` asserts default==hardcoded for every
+  envelope + exact output for custom templates).
+- **Perf rules:** read the template AFTER the throttle reprint; bash keeps ONE `jq` (a
+  dynamic program extracting only the referenced paths); native stays in-process. The
+  default install short-circuits to the hardcoded path, so it must never regress.
+- **Concepts** (see `TEMPLATES.md` for the full grammar): `{json.path[:format]}`, `{sep}`/
+  `{sep:type}` (smart separator), `{^}` (boundary a sep won't cross), `{?json.path}…{/}`
+  (conditional group), `{colorname}` (full ANSI vocabulary), escapes, `\n` → extra row.
 
 ## Performance constraints (the whole point of this script)
 
@@ -150,10 +183,21 @@ It targets ~15 ms/run because Claude Code calls it frequently. Preserve these:
 
 ## Common requests and how to handle them
 
-- **Add a field** → add to the `jq` array + `read` list (same position), parse/guard it,
-  build a colored segment, push to `parts`. See `EXTENDING.md` for a worked example.
-- **Reorder fields** → reorder the `parts+=(...)` lines. Cost is intentionally last.
-- **Change separators** → the join loop near the end (`line+=" "`).
+- **Change a user's layout** (which fields, order, format, colors, separators, rows, or
+  show a field not in the default like git branch / lines changed / PR) → **this is the
+  agentic self-service path: edit `env.CLAUDE_STATUSLINE_FIELDS` in their `settings.json`**
+  to a template (see `TEMPLATES.md` for the grammar and field list). Then verify by piping a
+  sample envelope through the script/binary and showing the line. Don't touch the script's
+  hardcoded path for a user-specific layout — that's the shared default.
+- **Add a new format / color token / engine feature** (affects everyone) → implement it in
+  BOTH `statusline-command.sh` and `native/src/lib.rs`, keep `DEFAULT_TEMPLATE` identical,
+  add tests, run `./parity-check.sh` + `cargo test`. See `EXTENDING.md`.
+- **Change the default layout** (`DEFAULT_TEMPLATE`) → edit it in BOTH front-ends
+  identically; the engine-vs-hardcoded battery and `parity-check.sh` must still pass (you'll
+  also be changing the hardcoded `parts+=(...)` path to match, or regenerating its expected
+  battery output).
+- **Add a field to the hardcoded default path** → add to the `jq` array + `read` list (same
+  position), parse/guard it, build a colored segment, push to `parts`. See `EXTENDING.md`.
 - **Change bar width / colors** → `render_bar` (default width 5) and the `BAR_GRAD`
   256-color gradient table.
 - **Idle refresh cadence** → `refreshInterval` in `settings.json` (seconds), not the script.

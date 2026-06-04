@@ -44,7 +44,7 @@ Both render the exact same line — choose how it runs:
 | Needs | `jq` + bash 4.2+ | a Rust toolchain (`cargo`) + a one-time build |
 | Build step | none | `cargo build` (done for you by `--native`) |
 | Portability | runs anywhere | platform-specific (build locally) |
-| Speed / RAM | ~6 ms (~1.8 ms throttled) / ~6 MB | ~0.4 ms / <1 MB, zero forks |
+| Speed / RAM | ~7 ms default · ~11 ms custom template · ~2 ms throttled / ~7 MB | ~0.4 ms (either layout) / <1 MB, zero forks |
 | Auditability | plain shell, read it in a glance | Rust source in [`native/`](native/) |
 
 **Recommendation: use the script.** The status line runs at most ~once a second, so the
@@ -152,12 +152,22 @@ it keeps the elapsed-time and reset countdown current. Tune it:
 
 ## Customize
 
-A few knobs without touching logic:
+**The layout is a template string** — set `CLAUDE_STATUSLINE_FIELDS` in your
+`settings.json` `env` block to choose which fields show, in what order, with what
+format, colors, separators, and even multiple rows. `install.sh` writes the
+default there for you to edit. Full guide: **[`TEMPLATES.md`](TEMPLATES.md)**.
+
+```jsonc
+// hide cost, move ctx last, color the model magenta:
+"env": { "CLAUDE_STATUSLINE_FIELDS": "{magenta}[{json.model.display_name:short}]{reset} {json.rate_limits.five_hour.used_percentage:bar} {json.context_window.used_percentage:bar}" }
+```
+
+Or just open the repo in Claude Code and ask it to change your status line.
+
+A few lower-level knobs (only relevant when editing the script's hardcoded path):
 
 - **Bar width** — change `_BARW=5` near the top (the precomputed `█`/`░` runs follow it),
   or pass a width as `render_bar`'s 3rd arg: `render_bar _ctxbar "$ctx_pct" 8`.
-- **Separator** — fields are joined with a single space in the final loop
-  (`line+=" "`). Swap for `"${SEP}"` (a dim `·`) or `"  "` (two spaces).
 - **Context window size fallback** — if your Claude Code is old enough that it doesn't
   send `context_window.used_percentage`, the script estimates from the transcript using
   a 1M default; override with `CLAUDE_STATUSLINE_CTX_MAX=200000`.
@@ -169,8 +179,9 @@ A few knobs without touching logic:
 Claude Code re-runs the script on every event (each assistant message, etc.) plus the
 `refreshInterval` timer. To avoid re-rendering on every burst event, the script caches its
 last output per session and, if called again within `CLAUDE_STATUSLINE_THROTTLE` seconds,
-**reprints the cached line and exits before `jq`** — so a coalesced call costs ~1.8 ms and
-**zero forks** instead of a full render.
+**reprints the cached line and exits before `jq`** — so a coalesced call costs ~2 ms and
+**zero forks** instead of a full render (and regardless of layout — the reprint never runs
+the template engine).
 
 - Default: **2 seconds**. Set the env var to change it, or to **`0` to disable** (always
   full-render). Configure it in `~/.claude/settings.json`:
@@ -202,11 +213,18 @@ native binary — **no `bash`, no `jq`, no forks**. It builds with **zero extern
 prefers the **musl** static target when it's installed, producing a **~431 KB** binary
 (vs ~1.07 MB on static glibc).
 
-| | bash, full render | bash, throttled | **native binary** (musl) |
-|---|---|---|---|
-| Wall time | ~6 ms | ~1.8 ms | **~0.4 ms** (min ~0.34) |
-| Peak RAM | ~6.7 MB | ~3.5 MB | **<1 MB** |
-| Forks | 1 (`jq`) | 0 | **0** |
+| | bash hardcoded | bash custom template | bash throttled | **native binary** (musl) |
+|---|---|---|---|---|
+| Wall time | ~7 ms | ~11 ms | ~2 ms | **~0.4 ms** (either layout) |
+| Peak RAM | ~7 MB | ~7.6 MB | ~3.5 MB | **<1 MB** |
+| Forks | 1 (`jq`) | 1 (`jq`) | 0 | **0** |
+
+The **template engine adds cost only to the bash path** (interpreted character
+tokenizing): a *custom* `CLAUDE_STATUSLINE_FIELDS` layout runs ~11 ms vs ~7 ms for the
+default. The shipped default short-circuits to the hardcoded path, so most users stay at
+~7 ms; bursts hit the ~2 ms throttled reprint regardless. The **native binary renders any
+layout in-process** (the engine logic is below spawn noise), so it's **~0.4 ms either
+way** — the recommended front-end for a heavy custom template.
 
 It doesn't need the throttle (a full render is already sub-millisecond, so a cache
 round-trip would only add cost) — it always shows fresh values. The binary is
@@ -287,40 +305,58 @@ irreducible `execve` + kernel page setup + Rust init.
 
 ## Benchmark
 
-`bench.sh` measures wall time, CPU, CPU%, peak RAM, and forks. It **auto-detects** whether
-the target is the bash script or the native binary and adjusts accordingly. Higher
-iteration counts give steadier numbers. To compare the two fairly, run both back-to-back —
-same harness, same timing overhead.
+`bench.sh` measures wall time, CPU, CPU%, peak RAM, and forks, for either the bash script
+or the native binary. **By default it benches THIS repo on the ENGINE path** (a real custom
+`CLAUDE_STATUSLINE_FIELDS` template); `--no-template` measures the default hardcoded path,
+`--template='…'` uses your own layout, and an explicit path argument benches another copy
+(e.g. the installed one). Higher iteration counts give steadier numbers; the **min** is the
+robust estimator (a `max` spike is a scheduler hiccup, not the code).
+
+| command | target | layout | wall (min) |
+|---|---|---|---|
+| `./bench.sh` | repo script | engine (template) | ~11 ms |
+| `./bench.sh --no-template` | repo script | hardcoded | ~7 ms |
+| `./bench.sh --native` | repo binary | engine | ~0.44 ms |
+| `./bench.sh --native --no-template` | repo binary | hardcoded | ~0.40 ms |
+
+**With vs without a custom template:** the bash engine (interpreted character tokenizing +
+one dynamic `jq`) adds **~+4 ms** over the hardcoded path (~11 vs ~7 ms). The native engine
+adds **~0 ms** — ≈0.4 ms either way, because the in-process logic is below process-spawn
+noise. The shipped default short-circuits to the hardcoded path, so only a *customized*
+template pays the bash cost, and the native binary doesn't pay it at all.
 
 ### Benchmark the bash script
 
 ```bash
-./bench.sh                                 # 200 iters, auto-finds the installed target
+./bench.sh                                 # this repo, ENGINE path (custom template)
+./bench.sh --no-template                   # the default hardcoded path (no env var)
+./bench.sh --template='{json.model.display_name:short} {json.cost.total_cost_usd:usd}'
 ./bench.sh 5000                            # more iterations = steadier
-./bench.sh 5000 ./statusline-command.sh    # an explicit script path
+./bench.sh 5000 ~/.claude/statusline-command.sh   # bench another copy (e.g. installed)
 ```
 
 ```
+  layout:     ENGINE — custom template (full tokenize + dynamic jq + format dispatch)
   (main metrics below = FULL render, throttle disabled)
 
-Wall time:  5.87 ms/run   (min 4.72, max 8.98)   [300 runs in 1.76s]
-CPU time:   5.72 ms/run   (user+sys, summed over 300 runs)
-CPU usage:  97% of one core while running   (CPU 1.72s / wall 1.76s)
-            0.010% of one core averaged at refreshInterval 60s (idle duty cycle)
-Peak RAM:   ~6.6 MB momentary  (bash 3.5 MB + jq 3.1 MB, both transient)
-            (0 MB resident between runs — nothing stays alive)
+Wall time:  11.20 ms/run   (min 9.05, max 28.89)   [2000 runs in 22.4s]   # ENGINE
+CPU time:   11.30 ms/run   (user+sys, summed over 2000 runs)
 External processes/run: 1  [ 1 jq ]
+Throttled fast-path: 2.10 ms/run   (cached reprint, no jq)
 
-Throttled fast-path: 1.76 ms/run   (cached reprint, no jq)
-  external processes/run: 0  []
+# …and with --no-template (default hardcoded path):
+Wall time:  7.00 ms/run   (min 4.84, max 18.5)   [2000 runs in 14.0s]    # HARDCODED
+Peak RAM:   ~6.9 MB momentary  (bash 3.7 MB + jq 3.2 MB, both transient)
+External processes/run: 1  [ 1 jq ]
 ```
 
 ### Benchmark the native binary
 
 ```bash
-./bench.sh --native                        # builds native/ if needed, then benchmarks it
+./bench.sh --native                        # this repo's binary, ENGINE path (builds if needed)
+./bench.sh --native --no-template          # the default hardcoded path
 ./bench.sh --native 5000                   # more iterations
-./bench.sh 5000 ~/.claude/claude-statusline   # an already-installed binary
+./bench.sh --native 5000 ~/.claude/claude-statusline   # an already-installed binary
 ```
 
 ```
@@ -341,8 +377,10 @@ The native binary has no throttle and zero forks, so those sections are skipped 
 See [Native fast path](#native-fast-path-optional) for the side-by-side comparison.
 
 The script's main metrics measure the **full render** (throttle off) — the honest worst case: a
-single `jq` fork. The **throttled fast-path** is what a coalesced burst-call costs when the
-throttle is on and the cache is warm: ~2.6 ms and **zero forks** — it reads stdin with a
+single `jq` fork (the default hardcoded layout ~7 ms; a *custom template* ~11 ms — the
+engine's interpreted tokenizing, bash-only). The **throttled fast-path** is what a coalesced
+burst-call costs when the throttle is on and the cache is warm: ~2 ms and **zero forks** —
+regardless of layout, since it just reprints the cache. It reads stdin with a
 bash builtin, matches the cache with a regex, reprints the last line, and never reaches
 `jq` (see [Throttling](#throttling)). What's left is almost entirely bash interpreter
 startup (~1.3 ms), which any shell-based status line pays. (CPU usage can read slightly
@@ -359,15 +397,15 @@ little *over* 100% when the parent `bash` and the `jq` child briefly run on two 
 
 A *low* percentage here would actually be worse: it would mean the process spends its time
 blocked (on network/disk/another process) while taking longer in real time. **High
-utilization + short duration is ideal** — it does its work in one tight ~6 ms burst and
-exits.
+utilization + short duration is ideal** — it does its work in one tight ~7 ms burst
+(~11 ms with a custom template) and exits.
 
-The number that reflects real system impact is the **duty cycle**: the script runs ~6 ms,
-then the core is free for the next ~60 s, so the time-averaged load is about **0.010% of
+The number that reflects real system impact is the **duty cycle**: the script runs ~7 ms,
+then the core is free for the next ~60 s, so the time-averaged load is about **~0.012% of
 one core** at `refreshInterval: 60` (scales inversely with the interval). In short: *~100% =
-"efficient, no idle waiting, for 6 ms"; 0.010% = "negligible over time."*
+"efficient, no idle waiting, for ~7 ms"; ~0.012% = "negligible over time."*
 
-Each run is a short-lived process: ~6 ms, a few MB of RAM while it runs, **nothing
+Each run is a short-lived process: ~7 ms (default; ~11 ms custom template), a few MB of RAM while it runs, **nothing
 resident between runs**, and at most one fork (a single `jq` on a full render; zero on a
 throttled reprint — stdin is read with a bash builtin, not `cat`). At the default
 `refreshInterval: 60` that's a negligible, periodic blip. (Wall/CPU/RAM need bash 5+;
@@ -395,7 +433,7 @@ Steps 3–4 are skipped (not failed) when `cargo` is absent, so the bash tests s
 ## Field reference
 
 All fields come from the [status line JSON input](https://code.claude.com/docs/en/statusline#available-data).
-The script reads:
+The **default layout** reads:
 
 - `model.display_name` — model name (shortened to Opus/Sonnet/Haiku)
 - `effort.level` — reasoning effort, color-coded
@@ -406,8 +444,19 @@ The script reads:
 - `rate_limits.five_hour.used_percentage` — 5h usage bar
 - `rate_limits.five_hour.resets_at` — 5h reset countdown
 - `rate_limits.seven_day.used_percentage` — weekly (all-models) usage
+- `rate_limits.seven_day.resets_at` — weekly reset countdown
 - Sonnet-only weekly bucket — shown if/when a future Claude Code version exposes it
+
+With a custom template (**[`TEMPLATES.md`](TEMPLATES.md)**) you can show **any**
+documented field via `{json.<path>}` — e.g. `cost.total_lines_added`,
+`workspace.repo.name`, `pr.number`, `session_name`, `version`. See the full list
+in the [Claude Code docs](https://code.claude.com/docs/en/statusline#available-data).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Dual-licensed under either of
+
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+- BSD 3-Clause License ([LICENSE-BSD-3-Clause](LICENSE-BSD-3-Clause))
+
+at your option (`SPDX-License-Identifier: MIT OR BSD-3-Clause`).

@@ -1,10 +1,19 @@
 # Extending the status line
 
-The script renders one line from the JSON envelope Claude Code sends on stdin. Adding,
-removing, or reordering fields is mechanical once you know the three places involved.
+> **Changing your *own* layout?** You almost certainly don't need this file. Set a
+> template in `CLAUDE_STATUSLINE_FIELDS` — choose fields, order, formats, colors,
+> separators, and rows without touching any code. See **[`TEMPLATES.md`](TEMPLATES.md)**,
+> or open the repo in Claude Code and ask (*"show lines changed and the git branch"*).
+>
+> This file is for changing the **shared default layout** and the **engine itself**
+> (a new `:format`, a new color token) — changes that affect everyone and must be mirrored
+> in both `statusline-command.sh` and `native/src/lib.rs`.
 
-> Tip: open this repo in Claude Code and just ask — e.g. *"add a segment showing lines
-> added/removed this session"*. `CLAUDE.md` tells Claude exactly how to do it safely.
+The script renders the line from the JSON envelope Claude Code sends on stdin. The
+hardcoded default path's fields live in three places, kept in lockstep.
+
+> Tip: `CLAUDE.md` tells Claude exactly how to do all of this safely (parity rules, the
+> default==hardcoded invariant, the one-`jq` budget).
 
 ## The data flow
 
@@ -58,9 +67,26 @@ Delete its `parts+=(...)` line to stop showing it. You can leave the `jq`/`read`
 (harmless) or remove all three together — if you remove from `jq`/`read`, remove the
 matching slot in **both** so the remaining variables stay aligned.
 
+## Adding a `:format` or color token to the template engine
+
+A format (`{json.path:myfmt}`) is a small arm in the format dispatch; it must exist in
+**both** front-ends and produce identical bytes:
+
+- **Bash** — add a `case` arm in `_fmt_field` (`statusline-command.sh`), reusing the helpers
+  (`render_bar`, `pct_color`, `fmt_dur`, the `$C`/`$Y`/… color vars).
+- **Rust** — add a match arm in `fmt_value` (`native/src/lib.rs`).
+- A **color token** is an arm in `color_token` (both files) — named/bright/bg/256/rgb/hex/style.
+- Arbitrary `{json.path}` access needs **no code** — any envelope path already resolves.
+
+Then add a case to `native/tests/template_battery.rs` and `parity-check.sh`'s `checkt`
+list, and run `./run-tests.sh`. Keep `DEFAULT_TEMPLATE` byte-identical in both files.
+
 ## Rules of thumb
 
-- **Keep `jq` array and `read` list in lockstep** (same count, same order).
+- **Keep `jq` array and `read` list in lockstep** (same count, same order) — for the
+  hardcoded default path.
+- **Mirror the engine in both front-ends**; `./parity-check.sh` diffs them (default +
+  custom templates) and `cargo test` asserts default==hardcoded for every envelope.
 - **One fork only** (`jq`) on a full render, zero on a throttled reprint. Use bash builtins
   for everything else (stdin via `read -d ''`, not `cat`) — see `CLAUDE.md`.
 - **Guard numerics** with a regex before arithmetic/`printf` (`set -u` is on).

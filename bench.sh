@@ -3,11 +3,18 @@
 # Works for BOTH the bash script and the native binary.
 #
 # Usage:
-#   ./bench.sh                       # 200 iters, auto-find the installed target
+#   ./bench.sh                       # THIS repo's script, ENGINE path (a real
+#                                    #   custom template) — the feature's true cost
 #   ./bench.sh 500                   # custom iteration count
-#   ./bench.sh 500 /path/to/target   # explicit script (.sh) OR native binary
-#   ./bench.sh --native              # build native/ if needed, then bench it
-#   ./bench.sh --native 500
+#   ./bench.sh --native              # THIS repo's native binary, engine path
+#   ./bench.sh --no-template         # the DEFAULT hardcoded path (no env var set)
+#   ./bench.sh --template='{json.model.display_name:short} {json.cost.total_cost_usd:usd}'
+#   ./bench.sh 500 /path/to/target   # explicit script (.sh) OR binary overrides the default
+#
+# DEFAULTS: bench this repo (pass a path to bench another, e.g. the installed
+# ~/.claude copy) and bench WITH a custom template (the engine path: full
+# tokenize + dynamic jq + format dispatch). Use --no-template to measure the
+# default hardcoded path instead (engine short-circuited, no CLAUDE_STATUSLINE_FIELDS).
 #
 # Requires bash 5+ (EPOCHREALTIME) and jq. Peak-RAM and fork-count are
 # Linux-only (/proc); they degrade gracefully elsewhere.
@@ -15,13 +22,22 @@ set -u
 export LC_ALL=C   # '.' decimal separator in EPOCHREALTIME
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NATIVE=0; pos=()
-for a in "$@"; do case "$a" in --native) NATIVE=1 ;; *) pos+=("$a") ;; esac; done
+NATIVE=0; ENGINE=1; TEMPLATE_ARG=""; pos=()   # ENGINE on by default
+for a in "$@"; do case "$a" in
+  --native) NATIVE=1 ;;
+  --no-template|--default|--hardcoded) ENGINE=0 ;;
+  --engine) ENGINE=1 ;;
+  --template=*) TEMPLATE_ARG="${a#--template=}"; ENGINE=1 ;;
+  *) pos+=("$a") ;;
+esac; done
 ITERS="${pos[0]:-200}"; TARGET="${pos[1]:-}"
 
 command -v jq >/dev/null || { echo "error: jq required" >&2; exit 1; }
 
 # ── Resolve target ───────────────────────────────────────────────────
+# Default to THIS repo (so the bench reflects the code under review). Pass an
+# explicit path as the 2nd positional arg to bench another copy (e.g. the
+# installed ~/.claude/statusline-command.sh).
 if [ -z "$TARGET" ]; then
   if [ "$NATIVE" = 1 ]; then
     TARGET="$HERE/native/target/release/claude-statusline"
@@ -30,8 +46,6 @@ if [ -z "$TARGET" ]; then
       echo "→ building native binary…"
       ( cd "$HERE" && cargo build --release --manifest-path native/Cargo.toml >/dev/null )
     fi
-  elif [ -x "$HOME/.claude/statusline-command.sh" ]; then
-    TARGET="$HOME/.claude/statusline-command.sh"
   else
     TARGET="$HERE/statusline-command.sh"
   fi
@@ -43,6 +57,24 @@ if   [ "$NATIVE" = 1 ];                 then KIND=native
 elif [ "${TARGET##*.}" = sh ];          then KIND=script
 elif command -v file >/dev/null 2>&1 && file -b "$TARGET" 2>/dev/null | grep -q ELF; then KIND=native
 else KIND=script; fi
+
+# ── Layout mode ──────────────────────────────────────────────────────
+# Default (ENGINE on): a REPRESENTATIVE (moderate, not maximal) custom template —
+# a layout a real user would plausibly write: a few fields across mixed formats
+# (short, effort, folder, two bars, dur, usd), two {?}…{/} conditional groups, a
+# smart {sep}, and a couple color tokens. Exercises the full tokenize + ONE
+# dynamic-jq extract + format dispatch without being a kitchen-sink stress test.
+# --template=… overrides it; --no-template leaves CLAUDE_STATUSLINE_FIELDS empty
+# to measure the default hardcoded fast path instead.
+ENGINE_TEMPLATE='{bright_green}[{json.model.display_name:short}]{reset}{json.effort.level:effort} {bright_white}{json.workspace.current_dir:folder}{reset}{?json.context_window.used_percentage} ctx {json.context_window.used_percentage:bar}{/}{?json.rate_limits.five_hour.used_percentage} 5h {json.rate_limits.five_hour.used_percentage:bar}{/} {sep} {json.cost.total_duration_ms:dur} {json.cost.total_cost_usd:usd}'
+TEMPLATE=""
+if [ "$ENGINE" = 1 ]; then
+  if [ -n "$TEMPLATE_ARG" ]; then TEMPLATE="$TEMPLATE_ARG"; else TEMPLATE="$ENGINE_TEMPLATE"; fi
+fi
+# Exported so BOTH the bash script (inherited by `bash "$TARGET"`) and the native
+# binary (getenv) see it. Empty = the default/hardcoded path. /usr/bin/true and
+# the empty `floor` bin ignore it, so the spawn-floor comparison is unaffected.
+export CLAUDE_STATUSLINE_FIELDS="$TEMPLATE"
 
 # ── Sample envelope (resets_at relative so the countdown is sane) ────
 now=$(printf '%(%s)T' -1 2>/dev/null || date +%s)
@@ -65,7 +97,20 @@ runonce() {
 echo "Claude Code status line benchmark"
 echo "  target:     $TARGET  [$KIND]"
 echo "  iterations: $ITERS"
+if [ -n "$TEMPLATE" ]; then
+  echo "  layout:     ENGINE — custom template (full tokenize + dynamic jq + format dispatch)"
+else
+  echo "  layout:     default (hardcoded fast path; engine short-circuited)"
+fi
 echo "  sample out: $(runonce)"
+# Guard: if --engine but the target renders the template identically to its
+# default output, the target doesn't honor CLAUDE_STATUSLINE_FIELDS (e.g. a stale
+# installed script predating the engine) — the numbers would be mislabeled.
+if [ -n "$TEMPLATE" ]; then
+  if [ "$KIND" = native ]; then _def=$(CLAUDE_STATUSLINE_FIELDS= "$TARGET" < "$ENVF")
+  else _def=$(CLAUDE_STATUSLINE_FIELDS= CLAUDE_STATUSLINE_THROTTLE=0 bash "$TARGET" < "$ENVF"); fi
+  [ "$(runonce)" = "$_def" ] && echo "  ! WARN: engine output == default — target ignores CLAUDE_STATUSLINE_FIELDS (stale install?); pass the repo script/binary as the target."
+fi
 [ "$KIND" = script ] && echo "  (main metrics = FULL render, throttle disabled)"
 echo
 

@@ -86,15 +86,40 @@ fi
 block=$(jq -n --arg cmd "$command_str" --argjson ri "$REFRESH_INTERVAL" \
   '{type:"command", command:$cmd, refreshInterval:$ri}')
 
+# The status line only gets stdin, so its config travels in the settings.json
+# top-level `env` block (Claude Code injects it into the command's environment —
+# works for the bare native binary too, with no shell wrapper). Write the layout
+# template (the default, which the user/Claude can then edit) plus the two tuning
+# vars at their defaults so they're visible. Source DEFAULT_TEMPLATE from the
+# installed script so there's a single source of truth. jq --arg handles all the
+# JSON escaping of the ESC/·/↻ bytes.
+DEFAULT_TEMPLATE=$(sed -n "s/^DEFAULT_TEMPLATE='\(.*\)'\$/\1/p" "$SCRIPT_SRC")
+THR="${CLAUDE_STATUSLINE_THROTTLE:-2}"
+CTX="${CLAUDE_STATUSLINE_CTX_MAX:-1000000}"
+[ -n "$DEFAULT_TEMPLATE" ] || { echo "error: could not read DEFAULT_TEMPLATE from $SCRIPT_SRC." >&2; exit 1; }
+
 if [ -f "$SETTINGS" ]; then
   cp "$SETTINGS" "$SETTINGS.bak.$(date +%s)"
   echo "→ backed up existing settings.json"
   tmp=$(mktemp)
-  jq --argjson sl "$block" '.statusLine = $sl' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+  jq --argjson sl "$block" --arg tpl "$DEFAULT_TEMPLATE" --arg thr "$THR" --arg ctx "$CTX" \
+     '.statusLine = $sl
+      | .env = ((.env // {}) + {
+          CLAUDE_STATUSLINE_FIELDS: $tpl,
+          CLAUDE_STATUSLINE_THROTTLE: $thr,
+          CLAUDE_STATUSLINE_CTX_MAX: $ctx
+        })' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
 else
   echo "→ creating $SETTINGS"
-  jq -n --argjson sl "$block" '{statusLine: $sl}' > "$SETTINGS"
+  jq -n --argjson sl "$block" --arg tpl "$DEFAULT_TEMPLATE" --arg thr "$THR" --arg ctx "$CTX" \
+     '{statusLine: $sl,
+       env: {
+         CLAUDE_STATUSLINE_FIELDS: $tpl,
+         CLAUDE_STATUSLINE_THROTTLE: $thr,
+         CLAUDE_STATUSLINE_CTX_MAX: $ctx
+       }}' > "$SETTINGS"
 fi
 
 echo "✓ done — Claude Code will use: $command_str"
+echo "  Layout template written to settings.json env.CLAUDE_STATUSLINE_FIELDS (edit it, or ask Claude — see TEMPLATES.md)."
 echo "  Restart Claude Code (or just interact) to see it."

@@ -21,6 +21,14 @@ const GRN: &str = "\x1b[92m";
 const BAR_GRAD: [u16; 11] = [46, 82, 118, 154, 190, 226, 220, 214, 208, 202, 196];
 const BAR_W: i64 = 5;
 
+/// The default layout, as a template string (see the template engine below).
+/// Fed through `render_template` it reproduces `render_parsed`'s output for a
+/// full envelope byte-for-byte. `install.sh` writes this into the settings.json
+/// `env` block so the layout is visible and user-editable; when the env var is
+/// unset/empty OR equals this constant, the fast hardcoded path runs instead.
+/// MUST stay byte-identical to `DEFAULT_TEMPLATE` in statusline-command.sh.
+pub const DEFAULT_TEMPLATE: &str = "{bright_green}[{json.model.display_name:short}]{reset}{json.effort.level:effort} {grey}[{reset}{bright_white}{json.workspace.current_dir:folder}{reset}{grey}]{reset}{^}{?json.context_window.used_percentage} {bright_white}ctx{reset} {json.context_window.used_percentage:bar}{/}{?json.rate_limits.five_hour.used_percentage} {bright_white}5h{reset} {json.rate_limits.five_hour.used_percentage:bar}{json.rate_limits.five_hour.resets_at:countdown}{/}{?json.rate_limits.seven_day.used_percentage} {bright_white}wk{reset} {json.rate_limits.seven_day.used_percentage:pct}{json.rate_limits.seven_day.resets_at:countdown}{/}{?json.rate_limits.__sonnet__.used_percentage} {bright_white}son{reset} {json.rate_limits.__sonnet__.used_percentage:pct}{/} {sep} {json.cost.total_duration_ms:dur} {json.cost.total_cost_usd:usd}";
+
 // ── Minimal JSON value + recursive-descent parser ──────────────────────────
 // Some payloads (Null/Bool/Arr) are parsed only to advance correctly and are
 // never read back — that's intentional, not dead code.
@@ -274,6 +282,28 @@ fn pct_color(n: i64) -> &'static str {
     }
 }
 
+// Shorten a model display name to Opus/Sonnet/Haiku, else its first word, else "?".
+fn model_short(full: &str) -> &str {
+    if full.contains("Opus") {
+        "Opus"
+    } else if full.contains("Sonnet") {
+        "Sonnet"
+    } else if full.contains("Haiku") {
+        "Haiku"
+    } else {
+        full.split(' ').next().filter(|s| !s.is_empty()).unwrap_or("?")
+    }
+}
+
+// Effort level → SGR color (high/max red, medium yellow, else green).
+fn effort_color(level: &str) -> &'static str {
+    match level {
+        "high" | "max" => RED,
+        "medium" => YEL,
+        _ => GRN,
+    }
+}
+
 pub fn render_bar(pct: i64, width: i64) -> String {
     let pct = pct.clamp(0, 100);
     let filled = ((pct * width + 50) / 100).min(width);
@@ -293,8 +323,17 @@ pub fn render_bar(pct: i64, width: i64) -> String {
 /// Full pipeline: parse the envelope then render. `now` is the current unix
 /// time in seconds (passed in so the function is pure and deterministic).
 /// Output is byte-identical to statusline-command.sh for current envelopes.
+///
+/// Layout source: the `CLAUDE_STATUSLINE_FIELDS` template env var. When it is
+/// unset/empty OR equals `DEFAULT_TEMPLATE`, the fast hardcoded `render_parsed`
+/// path runs (zero engine cost); otherwise the template engine renders it.
+/// `render_parsed`/`render_template` stay pure (env is read only here) so tests
+/// drive them directly.
 pub fn render(input: &[u8], now: i64) -> String {
-    render_parsed(&parse(input), now)
+    match std::env::var("CLAUDE_STATUSLINE_FIELDS") {
+        Ok(t) if !t.is_empty() && t != DEFAULT_TEMPLATE => render_template(&parse(input), now, &t),
+        _ => render_parsed(&parse(input), now),
+    }
 }
 
 /// Render from an already-parsed tree — the formatting half of the pipeline,
@@ -304,23 +343,10 @@ pub fn render_parsed(root: &J, now: i64) -> String {
 
     // Model + effort (effort sits right next to the model name).
     let model_full = root.path(&["model", "display_name"]).and_then(|v| v.as_str()).unwrap_or("");
-    let model_short = if model_full.contains("Opus") {
-        "Opus"
-    } else if model_full.contains("Sonnet") {
-        "Sonnet"
-    } else if model_full.contains("Haiku") {
-        "Haiku"
-    } else {
-        model_full.split(' ').next().filter(|s| !s.is_empty()).unwrap_or("?")
-    };
+    let model_short = model_short(model_full);
     let effort = root.path(&["effort", "level"]).and_then(|v| v.as_str()).unwrap_or("");
     let effort_str = if !effort.is_empty() {
-        let ec = match effort {
-            "high" | "max" => RED,
-            "medium" => YEL,
-            _ => GRN,
-        };
-        format!(" {ec}{effort}{R}")
+        format!(" {}{effort}{R}", effort_color(effort))
     } else {
         String::new()
     };
@@ -390,9 +416,12 @@ pub fn render_parsed(root: &J, now: i64) -> String {
     // Duration (elapsed) and cost form the trailing timing/cost group; set
     // it off from the quotas with a bullet separator.
     let dur = int_at(root, &["cost", "total_duration_ms"]).map(|ms| fmt_dur(ms / 1000));
+    // Cost via the same integer-cents round2 the template engine uses, so the
+    // hardcoded path and the engine (and bash) all agree on half-cent values.
     let cost = root
         .path(&["cost", "total_cost_usd"])
-        .and_then(|v| v.as_f64());
+        .filter(|v| matches!(v, J::Num(_)))
+        .map(|v| round2(&node_text(v)));
     if parts.len() > group_base && (dur.is_some() || cost.is_some()) {
         parts.push(format!("{D}·{R}"));
     }
@@ -400,10 +429,614 @@ pub fn render_parsed(root: &J, now: i64) -> String {
         parts.push(format!("{C}{dur}{R}"));
     }
     if let Some(cost) = cost {
-        parts.push(format!("{Y}${cost:.2}{R}"));
+        parts.push(format!("{Y}${cost}{R}"));
     }
 
     parts.join(" ")
+}
+
+// ── Template engine (opt-in via CLAUDE_STATUSLINE_FIELDS) ────────────────────
+// A template string lays out the line. Tokens:
+//   {json.a.b.c}        value at that envelope path, raw text
+//   {json.a.b.c:fmt}    value rendered by a named format (bar/pct/dur/…)
+//   {sep} / {sep:type}  smart separator (shown only when flanked by content)
+//   {colorname}         ANSI SGR (named/bright/bg/256/rgb/hex/style); zero-width
+// Everything else (text, raw ANSI, unicode, newline→row) passes through.
+// Empty fields auto-collapse one adjacent space; see `emit`.
+
+// Item class for separator/collapse logic.
+#[derive(PartialEq)]
+enum Cls {
+    Vis,     // visible content (non-empty value, non-space literal, shown sep)
+    Gap,     // a run of spaces/tabs (collapsible separator)
+    Zero,    // zero-width bytes (color tokens) — emitted, transparent to spacing
+    Empty,   // empty field / suppressed sep — emits nothing, transparent
+    Newline, // hard line break (new status row)
+    Sep,     // unresolved smart separator
+    Bound,   // invisible boundary: a smart sep won't scan across it
+}
+struct Item {
+    text: String,
+    cls: Cls,
+}
+
+// Resolve a dotted path, honoring the synthetic `rate_limits.__sonnet__`
+// segment (any rate_limits key containing "sonnet", case-insensitive).
+fn tpl_resolve<'a>(root: &'a J, path: &[String]) -> Option<&'a J> {
+    if path.len() >= 2 && path[0] == "rate_limits" && path[1] == "__sonnet__" {
+        if let Some(J::Obj(m)) = root.get("rate_limits") {
+            for (k, v) in m {
+                if k.to_ascii_lowercase().contains("sonnet") {
+                    let segs: Vec<&str> = path[2..].iter().map(String::as_str).collect();
+                    return v.path(&segs);
+                }
+            }
+        }
+        return None;
+    }
+    let segs: Vec<&str> = path.iter().map(|s| s.as_str()).collect();
+    root.path(&segs)
+}
+
+// jq-`tostring`-ish text for a raw scalar (null/absent → empty, like bash `// ""`).
+fn node_text(n: &J) -> String {
+    match n {
+        // Strip any embedded 0x1f: the bash engine reserves it as its field
+        // terminator and gsubs it out, so we must too for byte-identical output.
+        J::Str(s) => s.replace('\u{1f}', ""),
+        J::Bool(b) => b.to_string(),
+        J::Num(x) => {
+            // Mirrors the bash jq canonicalization in _render_template: a whole
+            // value below 9e15 renders as a plain integer (so 42.0/5e1 → 42/50);
+            // anything else falls back to the language's default number format.
+            // NOTE bounded contract: above 9e15 Rust's `{}` (expanded decimal)
+            // and jq's `tostring` (exponent) diverge — not reachable for real
+            // envelope fields (percentages, ms, cost, token counts).
+            if *x == x.trunc() && x.abs() < 9e15 {
+                format!("{}", *x as i64)
+            } else {
+                format!("{}", x)
+            }
+        }
+        _ => String::new(),
+    }
+}
+
+// Render one `{json.path:fmt}` to its string (empty if absent/not applicable).
+// Does the canonical text look numeric to bash's `[[ =~ ^-?[0-9]+(\.[0-9]+)?$ ]]`?
+fn is_numeric_text(s: &str) -> bool {
+    let b = s.as_bytes();
+    let mut i = 0;
+    if i < b.len() && b[i] == b'-' {
+        i += 1;
+    }
+    let int_start = i;
+    while i < b.len() && b[i].is_ascii_digit() {
+        i += 1;
+    }
+    // Need ≥1 integer digit, and cap at 15 so the value stays within i64 and
+    // f64-exact range — mirrors the bash regex `^-?[0-9]{1,15}(\.[0-9]+)?$`, so
+    // an absurd magnitude renders empty in BOTH engines (no bash arithmetic
+    // error, no divergence) rather than overflowing. Real fields are far smaller.
+    let int_digits = i - int_start;
+    if int_digits == 0 || int_digits > 15 {
+        return false;
+    }
+    if i < b.len() && b[i] == b'.' {
+        i += 1;
+        let frac_start = i;
+        while i < b.len() && b[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i == frac_start {
+            return false; // a '.' must be followed by digits
+        }
+    }
+    i == b.len()
+}
+
+// Integer part of numeric text, mirroring bash `${v%.*}` (truncate toward zero).
+fn int_part(s: &str) -> i64 {
+    s.split('.').next().unwrap_or("").parse::<i64>().unwrap_or(0)
+}
+
+// Format numeric text as dollars.cents, rounding half-up on the DECIMAL TEXT
+// (not the f64) — locale- and float-formatter-independent, so it's byte-identical
+// to bash `_round2`. (Neither bash `printf %.2f` nor Rust `{:.2}` would agree
+// across engines on half-cent values; this integer-cents path does.)
+// Input is is_numeric_text-validated, so int_v fits i64.
+fn round2(s: &str) -> String {
+    let (sign, body) = match s.strip_prefix('-') {
+        Some(b) => ("-", b),
+        None => ("", s),
+    };
+    let (int, frac) = body.split_once('.').unwrap_or((body, ""));
+    let mut fp = frac.to_string();
+    fp.push_str("000"); // ensure ≥3 fractional digits to read the rounding digit
+    let d2: i64 = fp[0..2].parse().unwrap_or(0);
+    let round_up = fp.as_bytes()[2] >= b'5';
+    let mut cents = int.parse::<i64>().unwrap_or(0) * 100 + d2;
+    if round_up {
+        cents += 1;
+    }
+    format!("{sign}{}.{:02}", cents / 100, cents % 100)
+}
+
+// Render one {json.path:fmt} value. Operates on the field's CANONICAL TEXT
+// (node_text — the exact string the bash engine's jq step produces for that
+// field), then dispatches identically to statusline-command.sh's _fmt_field, so
+// the two engines render byte-for-byte the same for every field type.
+fn fmt_value(root: &J, path: &[String], fmt: Option<&str>, now: i64) -> String {
+    let text = tpl_resolve(root, path).map(node_text).unwrap_or_default();
+    let numeric = is_numeric_text(&text);
+    match fmt.unwrap_or("text") {
+        "short" => model_short(&text).to_string(),
+        // Pure last-path-component; empty → empty (no workspace fallback).
+        "basename" => text.rsplit('/').next().unwrap_or("").to_string(),
+        // The current folder: value → cwd → $PWD, then basename (matches the
+        // hardcoded folder segment's fallback chain).
+        "folder" => {
+            let v = if !text.is_empty() {
+                text.clone()
+            } else {
+                root.get("cwd")
+                    .and_then(|n| n.as_str())
+                    .filter(|s| !s.is_empty())
+                    .map(String::from)
+                    .or_else(|| std::env::var("PWD").ok())
+                    .unwrap_or_default()
+            };
+            v.rsplit('/').next().unwrap_or("").to_string()
+        }
+        "effort" => {
+            if text.is_empty() {
+                String::new()
+            } else {
+                format!(" {}{text}{R}", effort_color(&text))
+            }
+        }
+        "bar" => {
+            if numeric {
+                render_bar(int_part(&text), BAR_W)
+            } else {
+                String::new()
+            }
+        }
+        "pct" => {
+            if numeric {
+                let n = int_part(&text);
+                format!("{}{n}%{R}", pct_color(n))
+            } else {
+                String::new()
+            }
+        }
+        "pct-plain" => {
+            if numeric {
+                format!("{}%", int_part(&text))
+            } else {
+                String::new()
+            }
+        }
+        "dur" => {
+            if numeric {
+                let d = fmt_dur(int_part(&text) / 1000);
+                if d.is_empty() {
+                    String::new()
+                } else {
+                    format!("{C}{d}{R}")
+                }
+            } else {
+                String::new()
+            }
+        }
+        "usd" => {
+            if numeric {
+                format!("{Y}${}{R}", round2(&text))
+            } else {
+                String::new()
+            }
+        }
+        "countdown" => {
+            if numeric {
+                let diff = int_part(&text) - now;
+                let d = if diff > 0 { fmt_dur(diff) } else { String::new() };
+                if d.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {D}↻{R}{W}{d}{R}")
+                }
+            } else {
+                String::new()
+            }
+        }
+        // "text" and any unknown format → the raw canonical text.
+        _ => text,
+    }
+}
+
+// Is `{json.path}` present and non-empty? Drives conditional groups `{?path}…{/}`.
+fn field_present(root: &J, path: &[String]) -> bool {
+    tpl_resolve(root, path).map(|n| !node_text(n).is_empty()).unwrap_or(false)
+}
+
+// Separator glyph for `{sep[:type]}` (dim-grey, except `space`).
+fn sep_glyph(kind: &str) -> String {
+    match kind {
+        "space" => " ".to_string(),
+        "pipe" => format!("{D}|{R}"),
+        "dot" => format!("{D}•{R}"),
+        "slash" => format!("{D}/{R}"),
+        _ => format!("{D}·{R}"), // bullet (default)
+    }
+}
+
+// Named/extended color token → SGR escape. None if unrecognized.
+fn color_token(name: &str) -> Option<String> {
+    let simple = |c: &str| Some(format!("\x1b[{c}m"));
+    match name {
+        "reset" => return simple("0"),
+        "bold" => return simple("1"),
+        "dim" => return simple("2"),
+        "italic" => return simple("3"),
+        "underline" => return simple("4"),
+        "blink" => return simple("5"),
+        "reverse" => return simple("7"),
+        "hidden" => return simple("8"),
+        "strike" => return simple("9"),
+        _ => {}
+    }
+    // foreground base code for a named/bright color.
+    fn fg(name: &str) -> Option<u16> {
+        Some(match name {
+            "black" => 30,
+            "red" => 31,
+            "green" => 32,
+            "yellow" => 33,
+            "blue" => 34,
+            "magenta" => 35,
+            "cyan" => 36,
+            "white" => 37,
+            "bright_black" | "grey" | "gray" => 90,
+            "bright_red" => 91,
+            "bright_green" => 92,
+            "bright_yellow" => 93,
+            "bright_blue" => 94,
+            "bright_magenta" => 95,
+            "bright_cyan" => 96,
+            "bright_white" => 97,
+            _ => return None,
+        })
+    }
+    if let Some(c) = fg(name) {
+        return simple(&c.to_string());
+    }
+    if let Some(rest) = name.strip_prefix("bg_") {
+        // background = fg code + 10 (40-47 / 100-107).
+        return fg(rest).map(|c| format!("\x1b[{}m", c + 10));
+    }
+    if let Some(n) = name.strip_prefix("fg256:").and_then(|s| s.parse::<u16>().ok()) {
+        if n <= 255 {
+            return simple(&format!("38;5;{n}"));
+        }
+    }
+    if let Some(n) = name.strip_prefix("bg256:").and_then(|s| s.parse::<u16>().ok()) {
+        if n <= 255 {
+            return simple(&format!("48;5;{n}"));
+        }
+    }
+    let rgb = |s: &str| -> Option<(u16, u16, u16)> {
+        let p: Vec<_> = s.split(',').collect();
+        if p.len() == 3 {
+            let r = p[0].trim().parse::<u16>().ok()?;
+            let g = p[1].trim().parse::<u16>().ok()?;
+            let b = p[2].trim().parse::<u16>().ok()?;
+            if r <= 255 && g <= 255 && b <= 255 {
+                return Some((r, g, b));
+            }
+        }
+        None
+    };
+    if let Some(s) = name.strip_prefix("rgb:") {
+        if let Some((r, g, b)) = rgb(s) {
+            return simple(&format!("38;2;{r};{g};{b}"));
+        }
+    }
+    if let Some(s) = name.strip_prefix("bgrgb:") {
+        if let Some((r, g, b)) = rgb(s) {
+            return simple(&format!("48;2;{r};{g};{b}"));
+        }
+    }
+    let hex = |s: &str| -> Option<(u16, u16, u16)> {
+        let h = s.strip_prefix('#')?;
+        if h.len() == 6 {
+            let r = u16::from_str_radix(&h[0..2], 16).ok()?;
+            let g = u16::from_str_radix(&h[2..4], 16).ok()?;
+            let b = u16::from_str_radix(&h[4..6], 16).ok()?;
+            return Some((r, g, b));
+        }
+        None
+    };
+    if name.starts_with('#') {
+        if let Some((r, g, b)) = hex(name) {
+            return simple(&format!("38;2;{r};{g};{b}"));
+        }
+    }
+    if let Some(s) = name.strip_prefix("bg") {
+        if s.starts_with('#') {
+            if let Some((r, g, b)) = hex(s) {
+                return simple(&format!("48;2;{r};{g};{b}"));
+            }
+        }
+    }
+    None
+}
+
+// Interpret backslash escapes within a literal run (real control bytes from
+// JSON `` already pass through untouched).
+fn unescape_into(out: &mut String, chars: &[char], i: &mut usize) {
+    // caller guarantees chars[*i] == '\\' and there is a next char
+    let n = chars[*i + 1];
+    match n {
+        'e' => {
+            out.push('\u{1b}');
+            *i += 2;
+        }
+        'n' => {
+            out.push('\n');
+            *i += 2;
+        }
+        't' => {
+            out.push('\t');
+            *i += 2;
+        }
+        '\\' => {
+            out.push('\\');
+            *i += 2;
+        }
+        '{' => {
+            out.push('{');
+            *i += 2;
+        }
+        '}' => {
+            out.push('}');
+            *i += 2;
+        }
+        'x' => {
+            let h: String = chars.get(*i + 2..*i + 4).map(|s| s.iter().collect()).unwrap_or_default();
+            if h.len() == 2 {
+                if let Ok(b) = u32::from_str_radix(&h, 16) {
+                    if let Some(c) = char::from_u32(b) {
+                        out.push(c);
+                    }
+                    *i += 4;
+                    return;
+                }
+            }
+            out.push('\\');
+            *i += 1;
+        }
+        'u' => {
+            let h: String = chars.get(*i + 2..*i + 6).map(|s| s.iter().collect()).unwrap_or_default();
+            if h.len() == 4 {
+                if let Ok(cp) = u32::from_str_radix(&h, 16) {
+                    if let Some(c) = char::from_u32(cp) {
+                        out.push(c);
+                    }
+                    *i += 6;
+                    return;
+                }
+            }
+            out.push('\\');
+            *i += 1;
+        }
+        '0'..='7' => {
+            // up to 3 octal digits (\033 → ESC)
+            let mut j = *i + 1;
+            let mut val: u32 = 0;
+            let mut cnt = 0;
+            while j < chars.len() && cnt < 3 && ('0'..='7').contains(&chars[j]) {
+                val = val * 8 + (chars[j] as u32 - '0' as u32);
+                j += 1;
+                cnt += 1;
+            }
+            if let Some(c) = char::from_u32(val) {
+                out.push(c);
+            }
+            *i = j;
+        }
+        _ => {
+            out.push('\\');
+            *i += 1;
+        }
+    }
+}
+
+// Split an (already-unescaped) literal run into Vis / Gap / Newline items.
+fn flush_lit(lit: &mut String, items: &mut Vec<Item>) {
+    if lit.is_empty() {
+        return;
+    }
+    let mut cur = String::new();
+    let mut ws = false; // current run is whitespace
+    for ch in lit.chars() {
+        if ch == '\n' {
+            if !cur.is_empty() {
+                items.push(Item { text: std::mem::take(&mut cur), cls: if ws { Cls::Gap } else { Cls::Vis } });
+            }
+            items.push(Item { text: String::new(), cls: Cls::Newline });
+            ws = false;
+        } else if ch == ' ' || ch == '\t' {
+            if !ws && !cur.is_empty() {
+                items.push(Item { text: std::mem::take(&mut cur), cls: Cls::Vis });
+            }
+            ws = true;
+            cur.push(ch);
+        } else {
+            if ws && !cur.is_empty() {
+                items.push(Item { text: std::mem::take(&mut cur), cls: Cls::Gap });
+            }
+            ws = false;
+            cur.push(ch);
+        }
+    }
+    if !cur.is_empty() {
+        items.push(Item { text: cur, cls: if ws { Cls::Gap } else { Cls::Vis } });
+    }
+    lit.clear();
+}
+
+fn classify_placeholder(inner: &str, root: &J, now: i64, items: &mut Vec<Item>) {
+    if inner == "^" {
+        items.push(Item { text: String::new(), cls: Cls::Bound });
+        return;
+    }
+    if inner == "sep" || inner.starts_with("sep:") {
+        let kind = inner.strip_prefix("sep:").unwrap_or("bullet");
+        items.push(Item { text: sep_glyph(kind), cls: Cls::Sep });
+        return;
+    }
+    if let Some(stripped) = inner.strip_prefix("json.") {
+        let (pathpart, fmt) = match stripped.split_once(':') {
+            Some((p, f)) => (p, Some(f)),
+            None => (stripped, None),
+        };
+        let path: Vec<String> = pathpart.split('.').map(String::from).collect();
+        let text = fmt_value(root, &path, fmt, now);
+        items.push(Item { cls: if text.is_empty() { Cls::Empty } else { Cls::Vis }, text });
+        return;
+    }
+    if let Some(sgr) = color_token(inner) {
+        items.push(Item { text: sgr, cls: Cls::Zero });
+        return;
+    }
+    // Unknown placeholder → show literally (typos stay visible).
+    items.push(Item { text: format!("{{{inner}}}"), cls: Cls::Vis });
+}
+
+// A smart `{sep}` is kept only when flanked by visible content on both sides
+// (scanning past transparent Gap/Zero/Empty; another Sep or a Newline blocks).
+fn has_vis(items: &[Item], idx: usize, forward: bool) -> bool {
+    // Scan outward (mirrors bash `_eng_has_vis`): the nearest Vis means "flanked",
+    // a Sep/Newline/Bound blocks, everything else is transparent.
+    let found = |j: usize| match items[j].cls {
+        Cls::Vis => Some(true),
+        Cls::Sep | Cls::Newline | Cls::Bound => Some(false),
+        _ => None,
+    };
+    if forward {
+        (idx + 1..items.len()).find_map(found)
+    } else {
+        (0..idx).rev().find_map(found)
+    }
+    .unwrap_or(false)
+}
+
+fn emit(items: &[Item]) -> String {
+    let mut out = String::new();
+    let mut pending = false; // a held gap awaiting the next visible/zero
+    let mut vis = false; // emitted any visible content on this line
+    for it in items {
+        match it.cls {
+            Cls::Newline => {
+                out.push('\n');
+                pending = false;
+                vis = false;
+            }
+            Cls::Gap => {
+                if vis {
+                    pending = true;
+                }
+            }
+            Cls::Empty | Cls::Bound => {} // transparent
+            Cls::Zero => {
+                if pending {
+                    out.push(' ');
+                    pending = false;
+                }
+                out.push_str(&it.text);
+            }
+            Cls::Vis | Cls::Sep => {
+                if pending {
+                    out.push(' ');
+                    pending = false;
+                }
+                out.push_str(&it.text);
+                vis = true;
+            }
+        }
+    }
+    out
+}
+
+/// Render an envelope through a template string. Pure (`now` and env-derived
+/// `tpl` are passed in).
+pub fn render_template(root: &J, now: i64, tpl: &str) -> String {
+    let chars: Vec<char> = tpl.chars().collect();
+    let mut items: Vec<Item> = Vec::new();
+    let mut lit = String::new();
+    // Conditional-group stack: `{?json.path}` pushes the field's presence, `{/}`
+    // pops. Content is emitted only while every frame is true.
+    let mut frames: Vec<bool> = Vec::new();
+    let active = |f: &[bool]| f.iter().all(|&b| b);
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '\\' && i + 1 < chars.len() {
+            if active(&frames) {
+                unescape_into(&mut lit, &chars, &mut i);
+            } else {
+                i += 2; // skip the escape pair while in a hidden group
+            }
+            continue;
+        }
+        if c == '{' {
+            if let Some(end) = chars[i + 1..].iter().position(|&x| x == '}') {
+                let inner: String = chars[i + 1..i + 1 + end].iter().collect();
+                i = i + 1 + end + 1;
+                if inner == "/" {
+                    if active(&frames) {
+                        flush_lit(&mut lit, &mut items);
+                    } else {
+                        lit.clear();
+                    }
+                    frames.pop();
+                    continue;
+                }
+                if let Some(cond) = inner.strip_prefix('?') {
+                    if active(&frames) {
+                        flush_lit(&mut lit, &mut items);
+                    } else {
+                        lit.clear();
+                    }
+                    let pp = cond.strip_prefix("json.").unwrap_or(cond);
+                    let path: Vec<String> = pp.split('.').map(String::from).collect();
+                    frames.push(field_present(root, &path));
+                    continue;
+                }
+                if active(&frames) {
+                    flush_lit(&mut lit, &mut items);
+                    classify_placeholder(&inner, root, now, &mut items);
+                } else {
+                    lit.clear();
+                }
+                continue;
+            }
+        }
+        if active(&frames) {
+            lit.push(c);
+        }
+        i += 1;
+    }
+    flush_lit(&mut lit, &mut items);
+
+    // Resolve smart separators (left→right; a suppressed sep becomes transparent).
+    for idx in 0..items.len() {
+        if items[idx].cls == Cls::Sep && !(has_vis(&items, idx, false) && has_vis(&items, idx, true)) {
+            items[idx].text.clear();
+            items[idx].cls = Cls::Empty;
+        }
+    }
+    emit(&items)
 }
 
 // ── Unit tests ──────────────────────────────────────────────────────────────

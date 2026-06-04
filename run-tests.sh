@@ -6,6 +6,8 @@
 #   2. Static checks                (tests/test-lint.sh — bash -n + shellcheck)
 #   3. The Rust unit tests          (cargo test, under native/)
 #   4. Script↔binary parity check   (./parity-check.sh)
+#   5. Exhaustive parity matrix     (tests/test-parity-matrix.sh — field×format,
+#      every color token, character/escape torture, structural + fuzz)
 #
 # Items 1–2 need only bash + jq. Items 3–4 need cargo (and build the native
 # binary); if cargo is absent they are SKIPPED, not failed, so the bash tests
@@ -70,6 +72,15 @@ elif command -v cargo >/dev/null 2>&1; then
   run "parity-check.sh" bash "$HERE/parity-check.sh"
 else
   skip "parity-check.sh" "cargo not installed (needs the native binary)"
+fi
+
+# ── 5. Exhaustive parity matrix + fuzz (script ↔ native binary) ──────
+if [ "$BASH_ONLY" = 1 ]; then
+  skip "parity-matrix" "--bash-only"
+elif command -v cargo >/dev/null 2>&1; then
+  run "parity-matrix (tests/test-parity-matrix.sh)" bash "$HERE/tests/test-parity-matrix.sh"
+else
+  skip "parity-matrix" "cargo not installed (needs the native binary)"
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────
