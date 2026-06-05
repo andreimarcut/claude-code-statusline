@@ -71,6 +71,8 @@ green/yellow/red threshold).
 | `countdown` | a unix timestamp | ` ↻4d3h` until that time, or empty if past |
 | `usd` | a number | `$N.NN`, yellow |
 | `short` | `model.display_name` | `Opus`/`Sonnet`/`Haiku`/first word/`?` |
+| `familyver` | `model.display_name` | family + version (`Opus-4.8`); no version → family alone |
+| `ctxsize` | `model.id` | `1m` when the id carries the 1M marker, else `200k` |
 | `basename` | a path | last path component (empty in → empty out) |
 | `folder` | `workspace.current_dir` | the current folder: value→`cwd`→`$PWD`, then basename |
 | `effort` | `effort.level` | ` level` colored by level (leading space included) |

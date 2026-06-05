@@ -225,6 +225,17 @@ _fmt_field() {
   local v="${_FV[$p]:-}"
   case "$f" in
     short) _model_short __o "$v";;
+    familyver)
+      local _fm; _model_short _fm "$v"
+      local -a _fparts; read -ra _fparts <<<"$v"
+      local _fver="" _ftok
+      for _ftok in "${_fparts[@]}"; do
+        case "$_ftok" in
+          [0-9]*) case "${_ftok//[0-9.]/}" in "") _fver="$_ftok"; break;; esac;;
+        esac
+      done
+      [ -n "$_fver" ] && __o="${_fm}-${_fver}" || __o="$_fm";;
+    ctxsize) case "$v" in *1m*|*1M*) __o="1m";; *) __o="200k";; esac;;
     basename) __o="${v##*/}";;
     folder) local _dd="$v"; [ -z "$_dd" ] && _dd="${_FV[cwd]:-}"; [ -z "$_dd" ] && _dd="$PWD"; __o="${_dd##*/}";;
     effort)

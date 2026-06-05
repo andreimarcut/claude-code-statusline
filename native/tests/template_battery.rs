@@ -72,6 +72,17 @@ fn custom_templates() {
     // Minimal: short model + usd, single space literal.
     assert_eq!(eng(opus, "{json.model.display_name:short} {json.cost.total_cost_usd:usd}"), "Opus \x1b[93m$1.50\x1b[0m");
 
+    // :familyver — family + trailing version; no version falls back to family alone.
+    assert_eq!(eng(opus, "{json.model.display_name:familyver}"), "Opus-4.8");
+    assert_eq!(eng(r#"{"model":{"display_name":"Claude Sonnet 4.6"}}"#, "{json.model.display_name:familyver}"), "Sonnet-4.6");
+    assert_eq!(eng(r#"{"model":{"display_name":"Opus"}}"#, "{json.model.display_name:familyver}"), "Opus");
+    assert_eq!(eng(r#"{"model":{"display_name":"GPT-Foo 2.0 Bar"}}"#, "{json.model.display_name:familyver}"), "GPT-Foo-2.0");
+
+    // :ctxsize — "1m" when the model id carries the marker, else "200k" (incl. absent).
+    assert_eq!(eng(r#"{"model":{"id":"claude-opus-4-8[1m]"}}"#, "{json.model.id:ctxsize}"), "1m");
+    assert_eq!(eng(r#"{"model":{"id":"claude-sonnet-4-6"}}"#, "{json.model.id:ctxsize}"), "200k");
+    assert_eq!(eng("{}", "{json.model.id:ctxsize}"), "200k");
+
     // Color tokens (named + bright) wrap raw text; reset closes.
     assert_eq!(eng(opus, "{red}{json.effort.level}{reset}"), "\x1b[31mhigh\x1b[0m");
     assert_eq!(eng(opus, "{bright_green}x{reset}"), "\x1b[92mx\x1b[0m");

@@ -295,6 +295,30 @@ fn model_short(full: &str) -> &str {
     }
 }
 
+// Model family + trailing version: "Claude Opus 4.8" -> "Opus-4.8". The version
+// is the first space-delimited token that is all digits and dots; with none, the
+// family alone is returned (same fallback as model_short).
+fn family_version(full: &str) -> String {
+    let family = model_short(full);
+    match full.split(' ').find(|t| {
+        t.chars().next().map_or(false, |c| c.is_ascii_digit())
+            && t.chars().all(|c| c.is_ascii_digit() || c == '.')
+    }) {
+        Some(version) => format!("{family}-{version}"),
+        None => family.to_string(),
+    }
+}
+
+// Context-window size from a model id: "1m" when the id carries the 1M marker
+// (e.g. "claude-opus-4-8[1m]"), else "200k". Empty/absent id -> "200k".
+fn ctx_size(id: &str) -> &'static str {
+    if id.to_ascii_lowercase().contains("1m") {
+        "1m"
+    } else {
+        "200k"
+    }
+}
+
 // Effort level → SGR color (high/max red, medium yellow, else green).
 fn effort_color(level: &str) -> &'static str {
     match level {
@@ -571,6 +595,10 @@ fn fmt_value(root: &J, path: &[String], fmt: Option<&str>, now: i64) -> String {
     let numeric = is_numeric_text(&text);
     match fmt.unwrap_or("text") {
         "short" => model_short(&text).to_string(),
+        // Family + trailing version ("Opus-4.8"); no version -> family alone.
+        "familyver" => family_version(&text),
+        // Context-window size from the model id: "1m" / "200k".
+        "ctxsize" => ctx_size(&text).to_string(),
         // Pure last-path-component; empty → empty (no workspace fallback).
         "basename" => text.rsplit('/').next().unwrap_or("").to_string(),
         // The current folder: value → cwd → $PWD, then basename (matches the
