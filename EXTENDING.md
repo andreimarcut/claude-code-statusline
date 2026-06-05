@@ -1,7 +1,7 @@
 # Extending the status line
 
 > **Changing your *own* layout?** You almost certainly don't need this file. Set a
-> template in `CLAUDE_STATUSLINE_FIELDS` — choose fields, order, formats, colors,
+> template in `CLAUDE_STATUSLINE_TEMPLATE` — choose fields, order, formats, colors,
 > separators, and rows without touching any code. See **[`TEMPLATES.md`](TEMPLATES.md)**,
 > or open the repo in Claude Code and ask (*"show lines changed and the git branch"*).
 >

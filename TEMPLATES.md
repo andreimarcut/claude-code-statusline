@@ -20,7 +20,7 @@ works for the native binary too, with no shell wrapper):
 {
   "statusLine": { "type": "command", "command": "bash ~/.claude/statusline-command.sh", "refreshInterval": 60 },
   "env": {
-    "CLAUDE_STATUSLINE_FIELDS": "{bright_green}[{json.model.display_name:short}]{reset} …",
+    "CLAUDE_STATUSLINE_TEMPLATE": "{bright_green}[{json.model.display_name:short}]{reset} …",
     "CLAUDE_STATUSLINE_THROTTLE": "2",
     "CLAUDE_STATUSLINE_CTX_MAX": "1000000"
   }
@@ -156,7 +156,7 @@ Two rows (git/dir on top, metrics below):
 
 A Claude session can change your status line on request. It will:
 
-1. Edit `env.CLAUDE_STATUSLINE_FIELDS` in your `settings.json`.
+1. Edit `env.CLAUDE_STATUSLINE_TEMPLATE` in your `settings.json`.
 2. Verify by piping a sample envelope through the script/binary and showing the line.
 3. Leave the default short-circuit intact, so reverting to the default keeps the fast path.
 

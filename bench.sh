@@ -14,7 +14,7 @@
 # DEFAULTS: bench this repo (pass a path to bench another, e.g. the installed
 # ~/.claude copy) and bench WITH a custom template (the engine path: full
 # tokenize + dynamic jq + format dispatch). Use --no-template to measure the
-# default hardcoded path instead (engine short-circuited, no CLAUDE_STATUSLINE_FIELDS).
+# default hardcoded path instead (engine short-circuited, no CLAUDE_STATUSLINE_TEMPLATE).
 #
 # Requires bash 5+ (EPOCHREALTIME) and jq. Peak-RAM and fork-count are
 # Linux-only (/proc); they degrade gracefully elsewhere.
@@ -64,7 +64,7 @@ else KIND=script; fi
 # (short, effort, folder, two bars, dur, usd), two {?}…{/} conditional groups, a
 # smart {sep}, and a couple color tokens. Exercises the full tokenize + ONE
 # dynamic-jq extract + format dispatch without being a kitchen-sink stress test.
-# --template=… overrides it; --no-template leaves CLAUDE_STATUSLINE_FIELDS empty
+# --template=… overrides it; --no-template leaves CLAUDE_STATUSLINE_TEMPLATE empty
 # to measure the default hardcoded fast path instead.
 ENGINE_TEMPLATE='{bright_green}[{json.model.display_name:short}]{reset}{json.effort.level:effort} {bright_white}{json.workspace.current_dir:folder}{reset}{?json.context_window.used_percentage} ctx {json.context_window.used_percentage:bar}{/}{?json.rate_limits.five_hour.used_percentage} 5h {json.rate_limits.five_hour.used_percentage:bar}{/} {sep} {json.cost.total_duration_ms:dur} {json.cost.total_cost_usd:usd}'
 TEMPLATE=""
@@ -74,7 +74,7 @@ fi
 # Exported so BOTH the bash script (inherited by `bash "$TARGET"`) and the native
 # binary (getenv) see it. Empty = the default/hardcoded path. /usr/bin/true and
 # the empty `floor` bin ignore it, so the spawn-floor comparison is unaffected.
-export CLAUDE_STATUSLINE_FIELDS="$TEMPLATE"
+export CLAUDE_STATUSLINE_TEMPLATE="$TEMPLATE"
 
 # ── Sample envelope (resets_at relative so the countdown is sane) ────
 now=$(printf '%(%s)T' -1 2>/dev/null || date +%s)
@@ -104,12 +104,12 @@ else
 fi
 echo "  sample out: $(runonce)"
 # Guard: if --engine but the target renders the template identically to its
-# default output, the target doesn't honor CLAUDE_STATUSLINE_FIELDS (e.g. a stale
+# default output, the target doesn't honor CLAUDE_STATUSLINE_TEMPLATE (e.g. a stale
 # installed script predating the engine) — the numbers would be mislabeled.
 if [ -n "$TEMPLATE" ]; then
-  if [ "$KIND" = native ]; then _def=$(CLAUDE_STATUSLINE_FIELDS= "$TARGET" < "$ENVF")
-  else _def=$(CLAUDE_STATUSLINE_FIELDS= CLAUDE_STATUSLINE_THROTTLE=0 bash "$TARGET" < "$ENVF"); fi
-  [ "$(runonce)" = "$_def" ] && echo "  ! WARN: engine output == default — target ignores CLAUDE_STATUSLINE_FIELDS (stale install?); pass the repo script/binary as the target."
+  if [ "$KIND" = native ]; then _def=$(CLAUDE_STATUSLINE_TEMPLATE= "$TARGET" < "$ENVF")
+  else _def=$(CLAUDE_STATUSLINE_TEMPLATE= CLAUDE_STATUSLINE_THROTTLE=0 bash "$TARGET" < "$ENVF"); fi
+  [ "$(runonce)" = "$_def" ] && echo "  ! WARN: engine output == default — target ignores CLAUDE_STATUSLINE_TEMPLATE (stale install?); pass the repo script/binary as the target."
 fi
 [ "$KIND" = script ] && echo "  (main metrics = FULL render, throttle disabled)"
 echo

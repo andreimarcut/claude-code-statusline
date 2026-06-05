@@ -100,7 +100,7 @@ A multi-agent brainstorm vetted ~22 candidate optimizations against the ~0.4 ms 
 
 **First, offer the choice (use AskUserQuestion): bash script vs native binary.**
 - **Script** (default, recommend this): needs `jq` + bash 4.2+, no build, portable,
-  trivially auditable. ~7 ms default layout (~11 ms with a custom `CLAUDE_STATUSLINE_FIELDS`
+  trivially auditable. ~7 ms default layout (~11 ms with a custom `CLAUDE_STATUSLINE_TEMPLATE`
   template — interpreted engine, bash-only) / ~2 ms throttled, ~7 MB.
 - **Native**: ~0.4 ms warm spawn, ~0.4 MB (musl) / ~1 MB (glibc), zero forks — but needs
   `cargo` and a one-time build, and is platform-specific. `install.sh --native` prefers the
@@ -143,7 +143,7 @@ run `./bench.sh` and report wall time / CPU / peak RAM / forks before and after.
 
 ## Configurable layout: the template engine
 
-The layout is user-configurable via the `CLAUDE_STATUSLINE_FIELDS` env var (a template
+The layout is user-configurable via the `CLAUDE_STATUSLINE_TEMPLATE` env var (a template
 string), delivered through the settings.json **`env` block** (`install.sh` writes the
 default there). User docs: `TEMPLATES.md`. How it's wired:
 
@@ -185,7 +185,7 @@ It targets ~15 ms/run because Claude Code calls it frequently. Preserve these:
 
 - **Change a user's layout** (which fields, order, format, colors, separators, rows, or
   show a field not in the default like git branch / lines changed / PR) → **this is the
-  agentic self-service path: edit `env.CLAUDE_STATUSLINE_FIELDS` in their `settings.json`**
+  agentic self-service path: edit `env.CLAUDE_STATUSLINE_TEMPLATE` in their `settings.json`**
   to a template (see `TEMPLATES.md` for the grammar and field list). Then verify by piping a
   sample envelope through the script/binary and showing the line. Don't touch the script's
   hardcoded path for a user-specific layout — that's the shared default.

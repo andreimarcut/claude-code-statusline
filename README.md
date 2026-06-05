@@ -7,7 +7,7 @@ gradient bars, the weekly quota, elapsed time, and session cost.
 ![Status line demo](assets/screenshot.png)
 
 ```
-[Opus] high [claude-code-statusline] ctx ▓▓░░░ 27% 5h ▓▓░░░ 30% ↻42m wk 6% 7m22s $4.55
+[Opus] high [claude-code-statusline] ctx ██░░░ 27% 5h ██░░░ 30% ↻42m wk 6% 7m22s $4.55
 ```
 
 - **`[Opus] high`** — model (shortened) + reasoning effort, color-coded by level.
@@ -152,14 +152,14 @@ it keeps the elapsed-time and reset countdown current. Tune it:
 
 ## Customize
 
-**The layout is a template string** — set `CLAUDE_STATUSLINE_FIELDS` in your
+**The layout is a template string** — set `CLAUDE_STATUSLINE_TEMPLATE` in your
 `settings.json` `env` block to choose which fields show, in what order, with what
 format, colors, separators, and even multiple rows. `install.sh` writes the
 default there for you to edit. Full guide: **[`TEMPLATES.md`](TEMPLATES.md)**.
 
 ```jsonc
 // hide cost, move ctx last, color the model magenta:
-"env": { "CLAUDE_STATUSLINE_FIELDS": "{magenta}[{json.model.display_name:short}]{reset} {json.rate_limits.five_hour.used_percentage:bar} {json.context_window.used_percentage:bar}" }
+"env": { "CLAUDE_STATUSLINE_TEMPLATE": "{magenta}[{json.model.display_name:short}]{reset} {json.rate_limits.five_hour.used_percentage:bar} {json.context_window.used_percentage:bar}" }
 ```
 
 Or just open the repo in Claude Code and ask it to change your status line.
@@ -220,7 +220,7 @@ prefers the **musl** static target when it's installed, producing a **~431 KB** 
 | Forks | 1 (`jq`) | 1 (`jq`) | 0 | **0** |
 
 The **template engine adds cost only to the bash path** (interpreted character
-tokenizing): a *custom* `CLAUDE_STATUSLINE_FIELDS` layout runs ~11 ms vs ~7 ms for the
+tokenizing): a *custom* `CLAUDE_STATUSLINE_TEMPLATE` layout runs ~11 ms vs ~7 ms for the
 default. The shipped default short-circuits to the hardcoded path, so most users stay at
 ~7 ms; bursts hit the ~2 ms throttled reprint regardless. The **native binary renders any
 layout in-process** (the engine logic is below spawn noise), so it's **~0.4 ms either
@@ -307,7 +307,7 @@ irreducible `execve` + kernel page setup + Rust init.
 
 `bench.sh` measures wall time, CPU, CPU%, peak RAM, and forks, for either the bash script
 or the native binary. **By default it benches THIS repo on the ENGINE path** (a real custom
-`CLAUDE_STATUSLINE_FIELDS` template); `--no-template` measures the default hardcoded path,
+`CLAUDE_STATUSLINE_TEMPLATE` template); `--no-template` measures the default hardcoded path,
 `--template='…'` uses your own layout, and an explicit path argument benches another copy
 (e.g. the installed one). Higher iteration counts give steadier numbers; the **min** is the
 robust estimator (a `max` spike is a scheduler hiccup, not the code).

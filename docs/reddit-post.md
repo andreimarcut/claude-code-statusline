@@ -12,6 +12,8 @@
 
 Hi, I want to share something I learned the hard way, because honestly the dead-ends turned out more useful than the win.
 
+First, for anyone who doesn't use Claude Code: it's an AI coding assistant that runs in your terminal, and a status line is the little bar along the bottom of it. Mine shows, at a glance, which model you're on, how much of the context window you've burned, how much of your usage budget is left, and what the session has cost — a tiny dashboard so you're not flying blind. This is the story of making that little program as fast as I could.
+
 It all started by accident. I stumbled on the `/statusline` command in Claude Code and wanted to see what it was about. So I read the docs: https://code.claude.com/docs/en/statusline — and the docs show an example status line, two lines, that looked really nice.
 
 ![Claude Code's default two-line status line — the docs example that started it](assets/default-statusline.png)

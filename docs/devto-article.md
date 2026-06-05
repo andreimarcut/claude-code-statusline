@@ -9,6 +9,8 @@ tags: rust, performance, bash, cli
 
 Hi,
 
+First, for anyone who doesn't use Claude Code: it's an AI coding assistant that runs in your terminal, and a **status line** is the little bar along the bottom of it. Mine shows, at a glance, which model you're on, how much of the context window you've burned, how much of your usage budget is left, and what the session has cost — a tiny dashboard so you're not flying blind. This is the story of making that little program as fast as I could.
+
 It all started by accident. I stumbled on the `/statusline` command inside Claude Code one day and had no idea what it was about, so I went looking. I read the [docs](https://code.claude.com/docs/en/statusline), and right there at the top is an example **status line** — two lines, model and folder and a little context — and it looked really nice.
 
 ![Claude Code's default two-line status line](assets/default-statusline.png)

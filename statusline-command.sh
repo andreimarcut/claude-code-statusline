@@ -12,7 +12,7 @@
 # - rate_limits.seven_day → wk (all-models weekly) + reset countdown
 # - cost.{total_duration_ms, total_cost_usd} → elapsed + $ (last)
 #
-# The layout is configurable: set the CLAUDE_STATUSLINE_FIELDS env var (via the
+# The layout is configurable: set the CLAUDE_STATUSLINE_TEMPLATE env var (via the
 # settings.json `env` block) to a template string and this script renders that
 # instead. When it is unset/empty OR equals DEFAULT_TEMPLATE, the fast hardcoded
 # path below runs. See TEMPLATES.md for the template syntax.
@@ -149,7 +149,7 @@ render_bar() {
   _out="${fc}${_FULL[filled]}${DG}${_DOT[$(( width - filled ))]}${R} ${W}${pct}%${R}"
 }
 
-# ── Template engine (opt-in via CLAUDE_STATUSLINE_FIELDS) ─────────────
+# ── Template engine (opt-in via CLAUDE_STATUSLINE_TEMPLATE) ─────────────
 # Mirror of native/src/lib.rs's engine — MUST produce byte-identical output.
 # The default install writes DEFAULT_TEMPLATE into the settings.json `env`
 # block; since the dispatch below short-circuits when the template equals it,
@@ -436,7 +436,7 @@ _render_template() {
 
 # ── Layout dispatch ──────────────────────────────────────────────────
 # Custom template → engine; unset/empty or the default → fast hardcoded path.
-TEMPLATE="${CLAUDE_STATUSLINE_FIELDS:-}"
+TEMPLATE="${CLAUDE_STATUSLINE_TEMPLATE:-}"
 if [ -n "$TEMPLATE" ] && [ "$TEMPLATE" != "$DEFAULT_TEMPLATE" ]; then
   _render_template "$TEMPLATE"
   [ -n "$THROTTLE_CACHE" ] && printf '%s\n%s' "$now" "$line" > "$THROTTLE_CACHE" 2>/dev/null

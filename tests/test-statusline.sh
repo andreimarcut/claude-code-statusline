@@ -75,16 +75,16 @@ strip_sgr() { sed $'s/\033\\[[0-9;]*m//g'; }
 
 # Render an envelope with the FULL render path (throttle disabled). The fields
 # template is cleared so these exercise the default hardcoded path regardless of
-# any inherited CLAUDE_STATUSLINE_FIELDS.
+# any inherited CLAUDE_STATUSLINE_TEMPLATE.
 # Usage: render '<json>'  -> stdout = raw rendered line (with escapes)
-render() { printf '%s' "$1" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS= bash "$SCRIPT"; }
+render() { printf '%s' "$1" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_TEMPLATE= bash "$SCRIPT"; }
 
 # Same, but with color escapes stripped (visible text only).
 render_plain() { render "$1" | strip_sgr; }
 
-# Render an envelope through a custom CLAUDE_STATUSLINE_FIELDS template.
+# Render an envelope through a custom CLAUDE_STATUSLINE_TEMPLATE template.
 # Usage: render_tpl '<template>' '<json>'
-render_tpl() { printf '%s' "$2" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="$1" bash "$SCRIPT"; }
+render_tpl() { printf '%s' "$2" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_TEMPLATE="$1" bash "$SCRIPT"; }
 render_tpl_plain() { render_tpl "$1" "$2" | strip_sgr; }
 
 NOW="$(printf '%(%s)T' -1)"
@@ -279,7 +279,7 @@ out_fresh="$(printf '%s' "$env_b" | TMPDIR="$THROTTLE_TMP" CLAUDE_STATUSLINE_THR
 assert_ne "throttle=0 bypasses cache (full render)" "$out_a" "$out_fresh"
 rm -rf "$THROTTLE_TMP"
 
-echo "== template engine (CLAUDE_STATUSLINE_FIELDS) =="
+echo "== template engine (CLAUDE_STATUSLINE_TEMPLATE) =="
 tpl_env='{"model":{"display_name":"Claude Opus 4.8"},"effort":{"level":"high"},"context_window":{"used_percentage":42},"cost":{"total_cost_usd":1.5,"total_duration_ms":65000}}'
 # Plain field + format.
 assert_eq "tpl short model + usd" "Opus \$1.50" "$(render_tpl_plain '{json.model.display_name:short} {json.cost.total_cost_usd:usd}' "$tpl_env")"
@@ -337,8 +337,8 @@ cd_now="$(printf '%(%s)T' -1)"
 assert_contains "tpl countdown non-zero" "$(render_tpl '{json.r.resets_at:countdown}' '{"r":{"resets_at":'"$((cd_now+5400))"'}}')" $'↻'
 assert_eq "tpl countdown at-now suppressed" "[]" "$(render_tpl_plain '[{json.r.resets_at:countdown}]' '{"r":{"resets_at":'"$cd_now"'}}')"
 # Malformed templates must not error under set -u (exit 0, output is best-effort).
-assert_true "tpl unterminated brace no error" bash -c 'printf "%s" "{}" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="{json.model" bash "'"$SCRIPT"'"'
-assert_true "tpl unknown color no error" bash -c 'printf "%s" "{}" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="{octarine}x{reset}" bash "'"$SCRIPT"'"'
+assert_true "tpl unterminated brace no error" bash -c 'printf "%s" "{}" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_TEMPLATE="{json.model" bash "'"$SCRIPT"'"'
+assert_true "tpl unknown color no error" bash -c 'printf "%s" "{}" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_TEMPLATE="{octarine}x{reset}" bash "'"$SCRIPT"'"'
 # The default template (with a trailing space to dodge the short-circuit) renders
 # through the engine identically to the hardcoded path.
 _dflt="$(sed -n "s/^DEFAULT_TEMPLATE='\(.*\)'\$/\1/p" "$SCRIPT")"
@@ -348,8 +348,8 @@ echo "== throttle reprints multi-line templates intact =="
 ml_tmp="$(mktemp -d)"; ml_sid="ml-sid"
 ml_env='{"session_id":"'"$ml_sid"'","model":{"display_name":"Opus"},"effort":{"level":"high"}}'
 ml_tpl='{json.model.display_name:short}\n{json.effort.level}'
-ml_a="$(printf '%s' "$ml_env" | TMPDIR="$ml_tmp" CLAUDE_STATUSLINE_THROTTLE=3600 CLAUDE_STATUSLINE_FIELDS="$ml_tpl" bash "$SCRIPT")"
-ml_b="$(printf '%s' '{"session_id":"'"$ml_sid"'","model":{"display_name":"Haiku"}}' | TMPDIR="$ml_tmp" CLAUDE_STATUSLINE_THROTTLE=3600 CLAUDE_STATUSLINE_FIELDS="$ml_tpl" bash "$SCRIPT")"
+ml_a="$(printf '%s' "$ml_env" | TMPDIR="$ml_tmp" CLAUDE_STATUSLINE_THROTTLE=3600 CLAUDE_STATUSLINE_TEMPLATE="$ml_tpl" bash "$SCRIPT")"
+ml_b="$(printf '%s' '{"session_id":"'"$ml_sid"'","model":{"display_name":"Haiku"}}' | TMPDIR="$ml_tmp" CLAUDE_STATUSLINE_THROTTLE=3600 CLAUDE_STATUSLINE_TEMPLATE="$ml_tpl" bash "$SCRIPT")"
 assert_eq "throttle reprint keeps both rows" $'Opus\nhigh' "$ml_b"
 assert_eq "cached multi-line equals first render" "$ml_a" "$ml_b"
 rm -rf "$ml_tmp"
@@ -377,20 +377,20 @@ if [ -r "$INSTALL" ]; then
   tmpf=$(mktemp)
   jq --argjson sl "$blk" --arg tpl "DEFTPL" --arg thr "2" --arg ctx "1000000" \
      '.statusLine = $sl
-      | .env = ((.env // {}) + {CLAUDE_STATUSLINE_FIELDS:$tpl, CLAUDE_STATUSLINE_THROTTLE:$thr, CLAUDE_STATUSLINE_CTX_MAX:$ctx})' \
+      | .env = ((.env // {}) + {CLAUDE_STATUSLINE_TEMPLATE:$tpl, CLAUDE_STATUSLINE_THROTTLE:$thr, CLAUDE_STATUSLINE_CTX_MAX:$ctx})' \
      "$settings" > "$tmpf" && mv "$tmpf" "$settings"
   assert_eq "merge preserves unrelated key (theme)" "dark" "$(jq -r '.theme' "$settings")"
   assert_eq "merge preserves nested key (permissions.allow[0])" "x" "$(jq -r '.permissions.allow[0]' "$settings")"
   assert_eq "merge updates statusLine.command" "bash ~/.claude/statusline-command.sh" "$(jq -r '.statusLine.command' "$settings")"
   assert_eq "merge sets refreshInterval" "60" "$(jq -r '.statusLine.refreshInterval' "$settings")"
   assert_eq "env merge preserves existing env var" "yes" "$(jq -r '.env.KEEP_ME' "$settings")"
-  assert_eq "env merge writes the template" "DEFTPL" "$(jq -r '.env.CLAUDE_STATUSLINE_FIELDS' "$settings")"
+  assert_eq "env merge writes the template" "DEFTPL" "$(jq -r '.env.CLAUDE_STATUSLINE_TEMPLATE' "$settings")"
   assert_eq "env merge writes throttle default" "2" "$(jq -r '.env.CLAUDE_STATUSLINE_THROTTLE' "$settings")"
   assert_true "merged settings is valid JSON" jq -e . "$settings"
   # Creating-from-scratch path (no existing settings.json).
   fresh="$merge_tmp/fresh.json"
   jq -n --argjson sl "$blk" --arg tpl "DEFTPL" --arg thr "2" --arg ctx "1000000" \
-     '{statusLine: $sl, env: {CLAUDE_STATUSLINE_FIELDS:$tpl, CLAUDE_STATUSLINE_THROTTLE:$thr, CLAUDE_STATUSLINE_CTX_MAX:$ctx}}' > "$fresh"
+     '{statusLine: $sl, env: {CLAUDE_STATUSLINE_TEMPLATE:$tpl, CLAUDE_STATUSLINE_THROTTLE:$thr, CLAUDE_STATUSLINE_CTX_MAX:$ctx}}' > "$fresh"
   assert_eq "fresh settings keys are statusLine+env" "env statusLine" "$(jq -r 'keys|join(" ")' "$fresh")"
   rm -rf "$merge_tmp"
 else

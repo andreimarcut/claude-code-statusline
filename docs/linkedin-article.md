@@ -8,6 +8,8 @@ A note up front, to be fair: this article was written with Claude Code (AI) — 
 
 I spent way too long making a status line start 5 milliseconds faster. The most useful thing I learned was admitting most of that work didn't matter :)
 
+First, for anyone who doesn't use Claude Code: it's an AI coding assistant that runs in your terminal, and a status line is the little bar along the bottom of it. Mine shows, at a glance, which model you're on, how much of the context window you've burned, how much of your usage budget is left, and what the session has cost — a tiny dashboard so you're not flying blind. This is the story of making that little program as fast as I could.
+
 It all started by accident. I stumbled on the /statusline command in Claude Code and wanted to see what it was even about. So I read the docs:
 https://code.claude.com/docs/en/statusline
 

@@ -10,6 +10,8 @@
 
 A note up front, to be fair: this essay was written with Claude Code (AI) — as were the status line, the benchmarks, and the charts. The voice, though, is modeled on my own past articles, which I write without AI; the model followed a style guide reverse-engineered from them. Style notes: https://github.com/radumarias/claude-code-statusline/blob/main/docs/style-guide.md · my non-AI writing: https://medium.com/@xorio42
 
+First, for anyone who doesn't use Claude Code: it's an AI coding assistant that runs in your terminal, and a *status line* is the little bar along the bottom of it. Mine shows, at a glance, which model you're on, how much of the context window you've burned, how much of your usage budget is left, and what the session has cost — a tiny dashboard so you're not flying blind. This is the story of making that little program as fast as I could.
+
 It all started by accident. I was poking around inside Claude Code and stumbled on the `/statusline` command, and I had no idea what it did, so I wanted to see what it was about. I read the docs to find out: https://code.claude.com/docs/en/statusline
 
 The docs show an example status line, two lines, and it looked nice.

@@ -42,11 +42,11 @@ AE=$(mktemp); BE=$(mktemp); trap 'rm -f "$AE" "$BE"' EXIT
 # rare second/minute tick between the two spawns.
 cmp_case() { # <name> <template> [envelope]
   local name="$1" tpl="$2" env="${3:-$ENV}" a b ac bc ae be
-  a=$(printf '%s' "$env" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="$tpl" bash "$SH" 2>"$AE"); ac=$?
-  b=$(printf '%s' "$env" | CLAUDE_STATUSLINE_FIELDS="$tpl" "$BIN" 2>"$BE"); bc=$?
+  a=$(printf '%s' "$env" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_TEMPLATE="$tpl" bash "$SH" 2>"$AE"); ac=$?
+  b=$(printf '%s' "$env" | CLAUDE_STATUSLINE_TEMPLATE="$tpl" "$BIN" 2>"$BE"); bc=$?
   if [ "$a" != "$b" ] && [[ "$tpl" == *countdown* ]]; then
-    a=$(printf '%s' "$env" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="$tpl" bash "$SH" 2>"$AE"); ac=$?
-    b=$(printf '%s' "$env" | CLAUDE_STATUSLINE_FIELDS="$tpl" "$BIN" 2>"$BE"); bc=$?
+    a=$(printf '%s' "$env" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_TEMPLATE="$tpl" bash "$SH" 2>"$AE"); ac=$?
+    b=$(printf '%s' "$env" | CLAUDE_STATUSLINE_TEMPLATE="$tpl" "$BIN" 2>"$BE"); bc=$?
   fi
   ae=$(<"$AE"); be=$(<"$BE")   # fork-free read (no `cat`)
   total=$((total+1))
@@ -166,7 +166,7 @@ echo "== 7. jq-injection probes (must render empty, never leak/inject) =="
 export PM_CANARY="LEAKED_SECRET"
 for inj in '{json.x"]|env|.["PM_CANARY}' '{json.x")|input|("}' '{json.x|.["a"]}' '{json.$__loc__}' '{json.x);"}' '{json.x // env}'; do
   cmp_case "inj" "$inj"
-  out=$(printf '%s' '{"x":1}' | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="$inj" bash "$SH" 2>/dev/null)
+  out=$(printf '%s' '{"x":1}' | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_TEMPLATE="$inj" bash "$SH" 2>/dev/null)
   case "$out" in *LEAKED_SECRET*) echo "!! INJECTION LEAK via $inj"; fail=$((fail+1));; esac
 done
 unset PM_CANARY

@@ -37,8 +37,8 @@ now=$(date +%s); pass=0; fail=0
 # template forces the hardcoded path on both (immune to an inherited env var).
 _cmp() { # <label> <template> <json>
   local a b
-  a=$(printf '%s' "$3" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_FIELDS="$2" bash "$SH")
-  b=$(printf '%s' "$3" | CLAUDE_STATUSLINE_FIELDS="$2" "$BIN")
+  a=$(printf '%s' "$3" | CLAUDE_STATUSLINE_THROTTLE=0 CLAUDE_STATUSLINE_TEMPLATE="$2" bash "$SH")
+  b=$(printf '%s' "$3" | CLAUDE_STATUSLINE_TEMPLATE="$2" "$BIN")
   if [ "$a" = "$b" ]; then
     pass=$((pass + 1))
   else

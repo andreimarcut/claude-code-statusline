@@ -324,13 +324,13 @@ pub fn render_bar(pct: i64, width: i64) -> String {
 /// time in seconds (passed in so the function is pure and deterministic).
 /// Output is byte-identical to statusline-command.sh for current envelopes.
 ///
-/// Layout source: the `CLAUDE_STATUSLINE_FIELDS` template env var. When it is
+/// Layout source: the `CLAUDE_STATUSLINE_TEMPLATE` template env var. When it is
 /// unset/empty OR equals `DEFAULT_TEMPLATE`, the fast hardcoded `render_parsed`
 /// path runs (zero engine cost); otherwise the template engine renders it.
 /// `render_parsed`/`render_template` stay pure (env is read only here) so tests
 /// drive them directly.
 pub fn render(input: &[u8], now: i64) -> String {
-    match std::env::var("CLAUDE_STATUSLINE_FIELDS") {
+    match std::env::var("CLAUDE_STATUSLINE_TEMPLATE") {
         Ok(t) if !t.is_empty() && t != DEFAULT_TEMPLATE => render_template(&parse(input), now, &t),
         _ => render_parsed(&parse(input), now),
     }
@@ -435,7 +435,7 @@ pub fn render_parsed(root: &J, now: i64) -> String {
     parts.join(" ")
 }
 
-// ── Template engine (opt-in via CLAUDE_STATUSLINE_FIELDS) ────────────────────
+// ── Template engine (opt-in via CLAUDE_STATUSLINE_TEMPLATE) ────────────────────
 // A template string lays out the line. Tokens:
 //   {json.a.b.c}        value at that envelope path, raw text
 //   {json.a.b.c:fmt}    value rendered by a named format (bar/pct/dur/…)

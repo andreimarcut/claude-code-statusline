@@ -105,7 +105,7 @@ if [ -f "$SETTINGS" ]; then
   jq --argjson sl "$block" --arg tpl "$DEFAULT_TEMPLATE" --arg thr "$THR" --arg ctx "$CTX" \
      '.statusLine = $sl
       | .env = ((.env // {}) + {
-          CLAUDE_STATUSLINE_FIELDS: $tpl,
+          CLAUDE_STATUSLINE_TEMPLATE: $tpl,
           CLAUDE_STATUSLINE_THROTTLE: $thr,
           CLAUDE_STATUSLINE_CTX_MAX: $ctx
         })' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
@@ -114,12 +114,12 @@ else
   jq -n --argjson sl "$block" --arg tpl "$DEFAULT_TEMPLATE" --arg thr "$THR" --arg ctx "$CTX" \
      '{statusLine: $sl,
        env: {
-         CLAUDE_STATUSLINE_FIELDS: $tpl,
+         CLAUDE_STATUSLINE_TEMPLATE: $tpl,
          CLAUDE_STATUSLINE_THROTTLE: $thr,
          CLAUDE_STATUSLINE_CTX_MAX: $ctx
        }}' > "$SETTINGS"
 fi
 
 echo "✓ done — Claude Code will use: $command_str"
-echo "  Layout template written to settings.json env.CLAUDE_STATUSLINE_FIELDS (edit it, or ask Claude — see TEMPLATES.md)."
+echo "  Layout template written to settings.json env.CLAUDE_STATUSLINE_TEMPLATE (edit it, or ask Claude — see TEMPLATES.md)."
 echo "  Restart Claude Code (or just interact) to see it."

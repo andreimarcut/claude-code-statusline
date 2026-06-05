@@ -8,6 +8,8 @@
 
 Up front: AI-written with Claude Code; the voice is modeled on my own past, non-AI articles (medium.com/@xorio42).
 
+If you don't use Claude Code: it's an AI coding assistant in your terminal, and a status line is the little bar at the bottom — mine shows your model, context used, budget left, and session cost at a glance.
+
 It all started by accident :) I stumbled on the /statusline command in Claude Code and wanted to see what it was, so I read the docs: https://code.claude.com/docs/en/statusline
 
 [Attach image: assets/default-statusline.png — caption: "Claude Code's default two-line status line — the docs example that started it"]
