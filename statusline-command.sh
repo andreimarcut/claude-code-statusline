@@ -106,6 +106,17 @@ fmt_dur() {
   fi
 }
 
+# Like fmt_dur, but keeps seconds at the minute scale (18m35s vs 18m).
+fmt_dur_secs() {
+  local -n _d="$1"; local s="$2"
+  if   [ "$s" -ge 86400 ]; then printf -v _d '%dd%dh' "$((s/86400))" "$(((s%86400)/3600))"
+  elif [ "$s" -ge 3600 ];  then printf -v _d '%dh%dm' "$((s/3600))"  "$(((s%3600)/60))"
+  elif [ "$s" -ge 60 ];    then printf -v _d '%dm%ds' "$((s/60))" "$((s%60))"
+  elif [ "$s" -ge 0 ];     then _d="${s}s"
+  else                          _d=""
+  fi
+}
+
 # Color a percent number by severity: green<50, yellow<80, red>=80.
 # Writes the SGR escape into the named variable (no $() subshell fork).
 # Usage: pct_color <outvar> <n>
@@ -244,6 +255,7 @@ _fmt_field() {
     pct) if [[ "$v" =~ ^-?[0-9]{1,15}(\.[0-9]+)?$ ]]; then local _pc; pct_color _pc "${v%.*}"; __o="${_pc}${v%.*}%${R}"; fi;;
     pct-plain) [[ "$v" =~ ^-?[0-9]{1,15}(\.[0-9]+)?$ ]] && __o="${v%.*}%";;
     dur) if [[ "$v" =~ ^-?[0-9]{1,15}(\.[0-9]+)?$ ]]; then local _du; fmt_dur _du "$((${v%.*}/1000))"; [ -n "$_du" ] && __o="${C}${_du}${R}"; fi;;
+    dur-secs) if [[ "$v" =~ ^-?[0-9]{1,15}(\.[0-9]+)?$ ]]; then local _ds; fmt_dur_secs _ds "$((${v%.*}/1000))"; [ -n "$_ds" ] && __o="${C}${_ds}${R}"; fi;;
     usd) if [[ "$v" =~ ^-?[0-9]{1,15}(\.[0-9]+)?$ ]]; then local _rc; _round2 _rc "$v"; __o="${Y}\$${_rc}${R}"; fi;;
     countdown) if [[ "$v" =~ ^-?[0-9]{1,15}(\.[0-9]+)?$ ]] && [ "$((${v%.*}-now))" -gt 0 ]; then local _cd; fmt_dur _cd "$((${v%.*}-now))"; [ -n "$_cd" ] && __o=" ${D}↻${R}${W}${_cd}${R}"; fi;;
     *) __o="$v";;

@@ -102,6 +102,11 @@ fn custom_templates() {
     // Duration uses the minutes-alone bucket (65000ms -> 1m), cyan-wrapped.
     assert_eq!(eng(opus, "{json.cost.total_duration_ms:dur}"), "\x1b[96m1m\x1b[0m");
 
+    // :dur-secs keeps seconds at the minute scale (65s -> 1m5s) where :dur gives 1m.
+    assert_eq!(eng(opus, "{json.cost.total_duration_ms:dur-secs}"), "\x1b[96m1m5s\x1b[0m");
+    assert_eq!(eng(r#"{"x":4530000}"#, "{json.x:dur-secs}"), "\x1b[96m1h15m\x1b[0m");
+    assert_eq!(eng(r#"{"x":45000}"#, "{json.x:dur-secs}"), "\x1b[96m45s\x1b[0m");
+
     // pct (colored) vs pct-plain (no color); 42% with green severity.
     assert_eq!(eng(opus, "{json.context_window.used_percentage:pct}"), "\x1b[92m42%\x1b[0m");
     assert_eq!(eng(opus, "{json.context_window.used_percentage:pct-plain}"), "42%");

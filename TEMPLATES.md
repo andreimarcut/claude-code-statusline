@@ -68,6 +68,7 @@ green/yellow/red threshold).
 | `pct` | a percentage | `NN%` colored by severity (green<50, yellow<80, red≥80) |
 | `pct-plain` | a percentage | `NN%`, no color |
 | `dur` | milliseconds | elapsed time `4d3h`/`5h12m`/`30m`/`45s`, cyan |
+| `dur-secs` | milliseconds | like `dur`, but keeps seconds at the minute scale (`18m35s` where `dur` gives `18m`), cyan |
 | `countdown` | a unix timestamp | ` ↻4d3h` until that time, or empty if past |
 | `usd` | a number | `$N.NN`, yellow |
 | `short` | `model.display_name` | `Opus`/`Sonnet`/`Haiku`/first word/`?` |

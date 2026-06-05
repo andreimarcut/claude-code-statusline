@@ -272,6 +272,22 @@ fn fmt_dur(s: i64) -> String {
     }
 }
 
+// Like fmt_dur, but keeps seconds at the minute scale ("18m35s" where fmt_dur
+// gives "18m"); day/hour scales drop seconds the same way fmt_dur does.
+fn fmt_dur_secs(s: i64) -> String {
+    if s >= 86400 {
+        format!("{}d{}h", s / 86400, (s % 86400) / 3600)
+    } else if s >= 3600 {
+        format!("{}h{}m", s / 3600, (s % 3600) / 60)
+    } else if s >= 60 {
+        format!("{}m{}s", s / 60, s % 60)
+    } else if s >= 0 {
+        format!("{}s", s)
+    } else {
+        String::new()
+    }
+}
+
 fn pct_color(n: i64) -> &'static str {
     if n >= 80 {
         RED
@@ -648,6 +664,18 @@ fn fmt_value(root: &J, path: &[String], fmt: Option<&str>, now: i64) -> String {
         "dur" => {
             if numeric {
                 let d = fmt_dur(int_part(&text) / 1000);
+                if d.is_empty() {
+                    String::new()
+                } else {
+                    format!("{C}{d}{R}")
+                }
+            } else {
+                String::new()
+            }
+        }
+        "dur-secs" => {
+            if numeric {
+                let d = fmt_dur_secs(int_part(&text) / 1000);
                 if d.is_empty() {
                     String::new()
                 } else {

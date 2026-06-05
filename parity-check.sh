@@ -81,6 +81,8 @@ checkt "tpl-multiline" '{json.model.display_name:short}\n{json.effort.level}' "$
 checkt "tpl-escapes"  '\e[1mA\e[0m \033[2mB\033[0m \x1b[3mC\x1b[0m ❤' '{}'
 checkt "tpl-countdown" '{json.rate_limits.five_hour.resets_at:countdown}{json.rate_limits.seven_day.resets_at:countdown}' "$_full"
 checkt "tpl-pct-plain" '{json.context_window.used_percentage:pct-plain}' "$_full"
+checkt "tpl-dur-secs"   '{json.cost.total_duration_ms:dur-secs}' "$_full"
+checkt "tpl-dur-secs-min" '{json.x:dur-secs}' '{"x":95000}'
 checkt "tpl-familyver"  '{json.model.display_name:familyver}' "$_full"
 checkt "tpl-familyver-bare" '{json.model.display_name:familyver}' '{"model":{"display_name":"Opus"}}'
 checkt "tpl-ctxsize-1m"  '[{json.model.id:ctxsize}]' '{"model":{"id":"claude-opus-4-8[1m]"}}'
