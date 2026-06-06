@@ -85,8 +85,9 @@ checkt "tpl-dur-secs"   '{json.cost.total_duration_ms:dur-secs}' "$_full"
 checkt "tpl-dur-secs-min" '{json.x:dur-secs}' '{"x":95000}'
 checkt "tpl-familyver"  '{json.model.display_name:familyver}' "$_full"
 checkt "tpl-familyver-bare" '{json.model.display_name:familyver}' '{"model":{"display_name":"Opus"}}'
-checkt "tpl-ctxsize-1m"  '[{json.model.id:ctxsize}]' '{"model":{"id":"claude-opus-4-8[1m]"}}'
-checkt "tpl-ctxsize-def" '[{json.model.id:ctxsize}]' '{}'
+checkt "tpl-ctxsize-1m"  '[{json.context_window.context_window_size:ctxsize}]' '{"context_window":{"context_window_size":1000000}}'
+checkt "tpl-ctxsize-200k" '[{json.context_window.context_window_size:ctxsize}]' '{"context_window":{"context_window_size":200000}}'
+checkt "tpl-ctxsize-def" '[{json.context_window.context_window_size:ctxsize}]' '{}'
 checkt "tpl-bgcolors"  '{bg256:200}o{reset} {bgrgb:10,20,30}p{reset} {bg#ff0080}q{reset}' '{}'
 checkt "tpl-sep-dot"   'a {sep:dot} b' '{}'
 checkt "tpl-sep-slash" 'a {sep:slash} b' '{}'

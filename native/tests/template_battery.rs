@@ -78,10 +78,12 @@ fn custom_templates() {
     assert_eq!(eng(r#"{"model":{"display_name":"Opus"}}"#, "{json.model.display_name:familyver}"), "Opus");
     assert_eq!(eng(r#"{"model":{"display_name":"GPT-Foo 2.0 Bar"}}"#, "{json.model.display_name:familyver}"), "GPT-Foo-2.0");
 
-    // :ctxsize — "1m" when the model id carries the marker, else "200k" (incl. absent).
-    assert_eq!(eng(r#"{"model":{"id":"claude-opus-4-8[1m]"}}"#, "{json.model.id:ctxsize}"), "1m");
-    assert_eq!(eng(r#"{"model":{"id":"claude-sonnet-4-6"}}"#, "{json.model.id:ctxsize}"), "200k");
-    assert_eq!(eng("{}", "{json.model.id:ctxsize}"), "200k");
+    // :ctxsize — from the authoritative context_window_size token count: "1m" at >=1M,
+    // else "Nk"; absent/non-numeric falls back to the documented 200k default.
+    assert_eq!(eng(r#"{"context_window":{"context_window_size":1000000}}"#, "{json.context_window.context_window_size:ctxsize}"), "1m");
+    assert_eq!(eng(r#"{"context_window":{"context_window_size":200000}}"#, "{json.context_window.context_window_size:ctxsize}"), "200k");
+    assert_eq!(eng(r#"{"context_window":{"context_window_size":500000}}"#, "{json.context_window.context_window_size:ctxsize}"), "500k");
+    assert_eq!(eng("{}", "{json.context_window.context_window_size:ctxsize}"), "200k");
 
     // Color tokens (named + bright) wrap raw text; reset closes.
     assert_eq!(eng(opus, "{red}{json.effort.level}{reset}"), "\x1b[31mhigh\x1b[0m");

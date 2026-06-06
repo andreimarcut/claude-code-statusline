@@ -246,7 +246,11 @@ _fmt_field() {
         esac
       done
       [ -n "$_fver" ] && __o="${_fm}-${_fver}" || __o="$_fm";;
-    ctxsize) case "$v" in *1m*|*1M*) __o="1m";; *) __o="200k";; esac;;
+    ctxsize)
+      if [[ "$v" =~ ^-?[0-9]{1,15}(\.[0-9]+)?$ ]]; then
+        local _cs="${v%.*}"
+        if [ "$_cs" -ge 1000000 ]; then __o="1m"; else __o="$((_cs/1000))k"; fi
+      else __o="200k"; fi;;
     basename) __o="${v##*/}";;
     folder) local _dd="$v"; [ -z "$_dd" ] && _dd="${_FV[cwd]:-}"; [ -z "$_dd" ] && _dd="$PWD"; __o="${_dd##*/}";;
     effort)

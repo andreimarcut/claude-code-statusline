@@ -325,13 +325,15 @@ fn family_version(full: &str) -> String {
     }
 }
 
-// Context-window size from a model id: "1m" when the id carries the 1M marker
-// (e.g. "claude-opus-4-8[1m]"), else "200k". Empty/absent id -> "200k".
-fn ctx_size(id: &str) -> &'static str {
-    if id.to_ascii_lowercase().contains("1m") {
-        "1m"
+// Context-window size from the token count in `context_window.context_window_size`
+// (authoritative; Claude Code pre-computes 200000 / 1000000): "1m" at >=1M tokens,
+// else "Nk" (200000 -> "200k"). Absent/non-numeric is handled by the caller, which
+// falls back to the documented 200k default.
+fn ctx_size(n: i64) -> String {
+    if n >= 1_000_000 {
+        "1m".to_string()
     } else {
-        "200k"
+        format!("{}k", n / 1000)
     }
 }
 
@@ -613,8 +615,9 @@ fn fmt_value(root: &J, path: &[String], fmt: Option<&str>, now: i64) -> String {
         "short" => model_short(&text).to_string(),
         // Family + trailing version ("Opus-4.8"); no version -> family alone.
         "familyver" => family_version(&text),
-        // Context-window size from the model id: "1m" / "200k".
-        "ctxsize" => ctx_size(&text).to_string(),
+        // Context-window size from context_window.context_window_size: "1m" / "Nk".
+        // Absent/non-numeric falls back to the documented 200k default.
+        "ctxsize" => if numeric { ctx_size(int_part(&text)) } else { "200k".to_string() },
         // Pure last-path-component; empty → empty (no workspace fallback).
         "basename" => text.rsplit('/').next().unwrap_or("").to_string(),
         // The current folder: value → cwd → $PWD, then basename (matches the
