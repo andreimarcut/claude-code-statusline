@@ -77,6 +77,9 @@ fn custom_templates() {
     assert_eq!(eng(r#"{"model":{"display_name":"Claude Sonnet 4.6"}}"#, "{json.model.display_name:familyver}"), "Sonnet-4.6");
     assert_eq!(eng(r#"{"model":{"display_name":"Opus"}}"#, "{json.model.display_name:familyver}"), "Opus");
     assert_eq!(eng(r#"{"model":{"display_name":"GPT-Foo 2.0 Bar"}}"#, "{json.model.display_name:familyver}"), "GPT-Foo-2.0");
+    // Version search splits on the same whitespace as bash's `read -ra` (space/tab/newline),
+    // so a tab between family and version still resolves (parity with the script).
+    assert_eq!(eng("{\"model\":{\"display_name\":\"Claude Opus\t4.8\"}}", "{json.model.display_name:familyver}"), "Opus-4.8");
 
     // :ctxsize — from the authoritative context_window_size token count: "1m" at >=1M,
     // else "Nk"; absent/non-numeric falls back to the documented 200k default.

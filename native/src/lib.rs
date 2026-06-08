@@ -312,11 +312,13 @@ fn model_short(full: &str) -> &str {
 }
 
 // Model family + trailing version: "Claude Opus 4.8" -> "Opus-4.8". The version
-// is the first space-delimited token that is all digits and dots; with none, the
-// family alone is returned (same fallback as model_short).
+// is the first whitespace-delimited token that is all digits and dots; with none,
+// the family alone is returned (same fallback as model_short). Split on the same
+// chars as bash's default IFS (space/tab/newline) so the version search stays
+// byte-identical to the script's `read -ra` arm.
 fn family_version(full: &str) -> String {
     let family = model_short(full);
-    match full.split(' ').find(|t| {
+    match full.split([' ', '\t', '\n']).find(|t| {
         t.chars().next().map_or(false, |c| c.is_ascii_digit())
             && t.chars().all(|c| c.is_ascii_digit() || c == '.')
     }) {

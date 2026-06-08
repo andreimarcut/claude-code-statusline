@@ -85,6 +85,7 @@ checkt "tpl-dur-secs"   '{json.cost.total_duration_ms:dur-secs}' "$_full"
 checkt "tpl-dur-secs-min" '{json.x:dur-secs}' '{"x":95000}'
 checkt "tpl-familyver"  '{json.model.display_name:familyver}' "$_full"
 checkt "tpl-familyver-bare" '{json.model.display_name:familyver}' '{"model":{"display_name":"Opus"}}'
+checkt "tpl-familyver-tab" '{json.model.display_name:familyver}' '{"model":{"display_name":"Claude Opus\t4.8"}}'
 checkt "tpl-ctxsize-1m"  '[{json.context_window.context_window_size:ctxsize}]' '{"context_window":{"context_window_size":1000000}}'
 checkt "tpl-ctxsize-200k" '[{json.context_window.context_window_size:ctxsize}]' '{"context_window":{"context_window_size":200000}}'
 checkt "tpl-ctxsize-def" '[{json.context_window.context_window_size:ctxsize}]' '{}'
